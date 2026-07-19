@@ -1,0 +1,42 @@
+# ---------------------------------------------------------------
+# Publica a versão web (PWA) no GitHub Pages automaticamente
+# sempre que a pasta web/ mudar (ou manualmente pela aba Actions).
+#
+# Pré-requisito (uma única vez, no site do GitHub):
+#   Settings → Pages → Source: "GitHub Actions"
+# O app ficará em: https://SEU_USUARIO.github.io/controle-ev/
+# ---------------------------------------------------------------
+name: Publicar app web
+
+on:
+  push:
+    branches: [main]
+    paths: ['web/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@v4
+
+      - name: Configurar o GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Empacotar a pasta web/
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+
+      - name: Publicar
+        id: deploy
+        uses: actions/deploy-pages@v4

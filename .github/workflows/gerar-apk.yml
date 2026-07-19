@@ -1,0 +1,68 @@
+# ---------------------------------------------------------------
+# Gera o APK Android automaticamente nos servidores do GitHub.
+#
+# Como usar (depois de subir o projeto para o GitHub):
+#   1. No site do repositório, abra a aba "Actions"
+#   2. Clique em "Gerar APK Android" (menu à esquerda)
+#   3. Clique no botão "Run workflow" e confirme
+#   4. Aguarde ~15 minutos; o APK aparece na aba "Releases"
+#      do repositório, pronto para baixar no celular.
+# ---------------------------------------------------------------
+name: Gerar APK Android
+
+on:
+  workflow_dispatch: # disparo manual pelo botão "Run workflow"
+
+permissions:
+  contents: write # necessário para publicar o APK em Releases
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@v4
+
+      - name: Instalar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Instalar Java 17 (exigido pelo Android)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Instalar dependências do projeto
+        run: npm ci
+
+      - name: Gerar o projeto Android nativo
+        run: npx expo prebuild --platform android --no-install
+        env:
+          CI: 1
+
+      - name: Compilar o APK
+        run: cd android && ./gradlew assembleRelease --no-daemon
+
+      - name: Renomear o APK
+        run: cp android/app/build/outputs/apk/release/app-release.apk controle-ev.apk
+
+      - name: Publicar na aba Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: apk
+          name: APK mais recente
+          body: |
+            APK do Controle EV gerado automaticamente.
+            Baixe o arquivo `controle-ev.apk` abaixo no celular e siga o
+            guia docs/INSTALAR_APK.md.
+          files: controle-ev.apk
+
+      # Cópia extra como "artifact" (backup, caso a Release falhe)
+      - name: Guardar APK como artefato
+        uses: actions/upload-artifact@v4
+        with:
+          name: controle-ev-apk
+          path: controle-ev.apk

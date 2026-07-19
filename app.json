@@ -1,17 +1,24 @@
 {
   "expo": {
-    "name": "controle-ev",
+    "name": "Controle EV",
     "slug": "controle-ev",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
+    "primaryColor": "#1B7F4C",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "br.com.controleev.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "A câmera é usada apenas para fotografar comprovantes de despesas. As fotos ficam somente no aparelho.",
+        "NSPhotoLibraryUsageDescription": "A galeria é usada apenas para anexar comprovantes de despesas. As fotos ficam somente no aparelho."
+      }
     },
     "android": {
+      "package": "br.com.controleev.app",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#D2F0DD",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -19,6 +26,18 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      "expo-sqlite",
+      "expo-sharing",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "A galeria é usada apenas para anexar comprovantes de despesas.",
+          "cameraPermission": "A câmera é usada apenas para fotografar comprovantes de despesas."
+        }
+      ],
+      "expo-font"
+    ]
   }
 }

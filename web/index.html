@@ -1,0 +1,1439 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Controle EV</title>
+
+<!-- PWA: instala como app na tela de início (iPhone e Android) -->
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#1B7F4C">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Controle EV">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+
+<!-- Biblioteca de PDF (local — funciona offline) -->
+<script src="js/jspdf.umd.min.js"></script>
+<script src="js/jspdf.plugin.autotable.min.js"></script>
+
+<style>
+/* ============ Tema (Material Design 3, claro/escuro) ============ */
+:root {
+  --bg:#F6FAF6; --surface:#FFFFFF; --surface2:#E9F1E9;
+  --primary:#1B7F4C; --on-primary:#FFF;
+  --primary-cont:#D2F0DD; --on-primary-cont:#0A3A22;
+  --text:#191C19; --text2:#54615A; --border:#DAE5DC;
+  --danger:#BA1A1A; --warn:#9A6A00; --chip:#E4EEE6; --laranja:#FB8C00;
+}
+[data-theme="escuro"] {
+  --bg:#101410; --surface:#1B211C; --surface2:#26302A;
+  --primary:#7FD9A4; --on-primary:#00391E;
+  --primary-cont:#175236; --on-primary-cont:#BFF0D2;
+  --text:#E1E5DF; --text2:#A4B0A6; --border:#37413A;
+  --danger:#FFB4AB; --warn:#F0C15C; --chip:#26302A; --laranja:#FFB74D;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="claro"]):not([data-theme="escuro"]) {
+    --bg:#101410; --surface:#1B211C; --surface2:#26302A;
+    --primary:#7FD9A4; --on-primary:#00391E;
+    --primary-cont:#175236; --on-primary-cont:#BFF0D2;
+    --text:#E1E5DF; --text2:#A4B0A6; --border:#37413A;
+    --danger:#FFB4AB; --warn:#F0C15C; --chip:#26302A; --laranja:#FFB74D;
+  }
+}
+
+* { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+html, body { height:100%; }
+body {
+  font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background:var(--bg); color:var(--text); font-size:16px;
+  padding-bottom:calc(74px + env(safe-area-inset-bottom));
+}
+.tela { display:none; padding:16px; padding-top:calc(12px + env(safe-area-inset-top)); max-width:640px; margin:0 auto; }
+.tela.ativa { display:block; animation:aparecer .18s ease; }
+@keyframes aparecer { from{opacity:.4; transform:translateY(4px)} to{opacity:1; transform:none} }
+
+h1 { font-size:22px; font-weight:800; margin-bottom:4px; }
+.subtitulo { font-size:13px; color:var(--text2); margin-bottom:12px; }
+h2 { font-size:15px; font-weight:700; margin:14px 0 8px; }
+
+.card { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:14px; margin-bottom:12px; }
+
+/* ============ Navegação inferior ============ */
+nav {
+  position:fixed; bottom:0; left:0; right:0; z-index:50;
+  display:flex; background:var(--surface); border-top:1px solid var(--border);
+  padding-bottom:env(safe-area-inset-bottom);
+}
+nav button {
+  flex:1; background:none; border:none; padding:8px 2px 6px; cursor:pointer;
+  color:var(--text2); font-size:10px; font-weight:600; font-family:inherit;
+  display:flex; flex-direction:column; align-items:center; gap:2px;
+}
+nav button.ativa { color:var(--primary); }
+nav button .ico { font-size:21px; line-height:1; }
+
+/* ============ Componentes ============ */
+.chips { display:flex; gap:8px; overflow-x:auto; padding:4px 0; scrollbar-width:none; }
+.chips::-webkit-scrollbar { display:none; }
+.chip {
+  flex-shrink:0; padding:8px 14px; border-radius:20px; font-size:13px; font-weight:600;
+  background:var(--chip); color:var(--text); border:1px solid var(--border); cursor:pointer;
+  font-family:inherit;
+}
+.chip.ativa { background:var(--primary); color:var(--on-primary); border-color:var(--primary); }
+
+.seg { display:flex; background:var(--surface2); border-radius:12px; padding:4px; margin-bottom:12px; }
+.seg button {
+  flex:1; padding:10px 4px; border:none; border-radius:9px; background:none; cursor:pointer;
+  font-size:13px; font-weight:600; color:var(--text); font-family:inherit;
+}
+.seg button.ativa { background:var(--primary); color:var(--on-primary); }
+
+label.rotulo { display:block; font-size:13px; font-weight:600; color:var(--text2); margin:10px 0 4px; }
+input, select, textarea {
+  width:100%; padding:12px; font-size:17px; color:var(--text); font-family:inherit;
+  background:var(--surface); border:1.5px solid var(--border); border-radius:12px; outline:none;
+}
+input:focus, select:focus { border-color:var(--primary); }
+.erro-campo { color:var(--danger); font-size:12px; margin-top:3px; }
+
+.botao {
+  width:100%; padding:15px; border:none; border-radius:14px; cursor:pointer; margin-top:14px;
+  background:var(--primary); color:var(--on-primary); font-size:16px; font-weight:700; font-family:inherit;
+}
+.botao.tonal { background:var(--primary-cont); color:var(--on-primary-cont); }
+.botao.contorno { background:none; border:1.5px solid var(--primary); color:var(--primary); }
+.botao.perigo { background:var(--danger); color:#fff; }
+.botao:active { opacity:.85; }
+
+/* KPIs */
+.kpis { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:10px 0; }
+.kpi { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:12px; }
+.kpi .r { font-size:11px; color:var(--text2); margin-bottom:5px; }
+.kpi .v { font-size:17px; font-weight:800; }
+
+/* Lista de lançamentos */
+.item { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:12px; margin-bottom:8px; }
+.item .linha1 { display:flex; align-items:center; gap:10px; }
+.item .ico-cat { width:38px; height:38px; border-radius:19px; display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0; }
+.item .meio { flex:1; min-width:0; }
+.item .titulo { font-size:14px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.item .detalhe { font-size:12px; color:var(--text2); margin-top:1px; }
+.item .valor { font-size:15px; font-weight:800; text-align:right; }
+.badge { display:inline-block; font-size:10px; font-weight:700; padding:2px 8px; border-radius:8px; margin-top:3px; }
+.badge.reemb { background:var(--primary-cont); color:var(--on-primary-cont); }
+.badge.pago { background:var(--surface2); color:var(--text2); }
+.acoes { display:flex; justify-content:flex-end; gap:14px; margin-top:8px; padding-top:7px; border-top:1px solid var(--border); }
+.acoes button { background:none; border:none; font-size:12px; font-weight:700; color:var(--primary); cursor:pointer; font-family:inherit; }
+.acoes button.perigo { color:var(--danger); }
+
+.vazio { text-align:center; padding:26px 12px; color:var(--text2); }
+.vazio .ico { font-size:38px; display:block; margin-bottom:8px; }
+.vazio b { color:var(--text); display:block; margin-bottom:3px; font-size:14px; }
+.vazio span { font-size:12px; }
+
+canvas.grafico { width:100%; height:180px; }
+
+/* Barra de meta */
+.meta-barra { height:8px; background:var(--surface2); border-radius:4px; margin-top:6px; overflow:hidden; }
+.meta-barra div { height:100%; background:var(--primary); border-radius:4px; transition:width .3s; }
+
+/* Modal */
+dialog {
+  border:none; border-radius:20px; padding:0; background:var(--surface); color:var(--text);
+  width:min(94vw, 560px); max-height:88vh; margin:auto;
+}
+dialog::backdrop { background:rgba(0,0,0,.5); }
+.modal-cab { display:flex; justify-content:space-between; align-items:center; padding:16px 18px 6px; }
+.modal-cab b { font-size:17px; }
+.modal-cab button { background:none; border:none; font-size:22px; color:var(--text2); cursor:pointer; }
+.modal-corpo { padding:6px 18px 18px; overflow-y:auto; max-height:70vh; }
+
+/* Toast de feedback */
+#toast {
+  position:fixed; left:20px; right:20px; bottom:calc(84px + env(safe-area-inset-bottom)); z-index:99;
+  background:var(--primary-cont); color:var(--on-primary-cont); border:1px solid var(--primary);
+  border-radius:14px; padding:13px; text-align:center; font-weight:700; font-size:14px;
+  opacity:0; pointer-events:none; transform:translateY(12px); transition:all .25s;
+}
+#toast.mostrar { opacity:1; transform:none; }
+
+.legenda { font-size:12px; }
+.legenda div { display:flex; align-items:center; gap:6px; margin-bottom:4px; }
+.legenda i { width:10px; height:10px; border-radius:5px; flex-shrink:0; }
+.legenda span { flex:1; }
+.miniatura { width:52px; height:52px; border-radius:10px; object-fit:cover; border:1px solid var(--border); }
+.nota { font-size:11px; color:var(--text2); text-align:center; margin-top:10px; }
+</style>
+</head>
+<body>
+
+<!-- ==================== TELA: INÍCIO ==================== -->
+<section class="tela ativa" id="tela-inicio">
+  <h1>Painel</h1>
+  <div class="subtitulo" id="painel-veiculo">Seu veículo elétrico</div>
+  <div class="chips" id="painel-anos"></div>
+  <div class="chips" id="painel-meses"></div>
+  <div class="kpis" id="painel-kpis"></div>
+  <div class="card" id="painel-meta" style="display:none"></div>
+  <div class="card">
+    <h2 style="margin-top:0">Recarga fora de casa — últimos 12 meses</h2>
+    <div id="wrap-graf-barras"><canvas class="grafico" id="graf-barras"></canvas></div>
+  </div>
+  <div class="card">
+    <h2 style="margin-top:0" id="titulo-pizza">Despesas do mês por categoria</h2>
+    <div id="wrap-graf-pizza" style="display:flex;align-items:center;gap:14px">
+      <canvas id="graf-pizza" style="width:150px;height:150px;flex-shrink:0"></canvas>
+      <div class="legenda" id="legenda-pizza" style="flex:1"></div>
+    </div>
+  </div>
+  <div class="card">
+    <h2 style="margin-top:0">Reembolsado × Pago por mim</h2>
+    <div id="wrap-graf-comp"><canvas class="grafico" id="graf-comp"></canvas></div>
+  </div>
+  <h2>Últimos lançamentos</h2>
+  <div id="painel-ultimos"></div>
+</section>
+
+<!-- ==================== TELA: LANÇAR ==================== -->
+<section class="tela" id="tela-lancar">
+  <h1>Lançar</h1>
+  <div class="subtitulo">Cadastro rápido</div>
+  <div class="seg" id="lancar-tipo">
+    <button data-v="despesa" class="ativa">Despesa</button>
+    <button data-v="km">Quilometragem</button>
+  </div>
+
+  <!-- Formulário de despesa -->
+  <form id="form-despesa" autocomplete="off">
+    <label class="rotulo">Categoria</label>
+    <div class="chips" id="desp-categorias"></div>
+    <label class="rotulo">Valor (R$) *</label>
+    <input id="desp-valor" inputmode="decimal" placeholder="0,00">
+    <div class="erro-campo" id="erro-valor"></div>
+    <label class="rotulo">Data *</label>
+    <input id="desp-data" type="date">
+    <div class="erro-campo" id="erro-data"></div>
+    <div id="desp-extra-fora">
+      <label class="rotulo">Energia (kWh) — opcional</label>
+      <input id="desp-kwh" inputmode="decimal" placeholder="Ex.: 32,5">
+      <label class="rotulo">Local — opcional</label>
+      <input id="desp-local" placeholder="Ex.: Eletroposto do shopping">
+    </div>
+    <label class="rotulo">Descrição</label>
+    <input id="desp-descricao" placeholder="Ex.: Recarga em viagem a trabalho">
+    <label class="rotulo">Situação *</label>
+    <div class="seg" id="desp-situacao">
+      <button type="button" data-v="pago" class="ativa">Paga por mim</button>
+      <button type="button" data-v="reembolsado">Reembolsada pela empresa</button>
+    </div>
+    <label class="rotulo">Comprovante (opcional)</label>
+    <div style="display:flex;align-items:center;gap:10px">
+      <button type="button" class="chip" onclick="document.getElementById('desp-foto-input').click()">📷 Anexar foto</button>
+      <input type="file" id="desp-foto-input" accept="image/*" style="display:none">
+      <img id="desp-foto-prev" class="miniatura" style="display:none">
+      <button type="button" class="chip" id="desp-foto-remover" style="display:none">✕ Remover</button>
+    </div>
+    <button type="submit" class="botao">✓ Salvar despesa</button>
+  </form>
+
+  <!-- Formulário de quilometragem -->
+  <form id="form-km" style="display:none" autocomplete="off">
+    <label class="rotulo">Período</label>
+    <div class="chips" id="km-anos"></div>
+    <div class="chips" id="km-meses"></div>
+    <div class="seg" id="km-metodo">
+      <button type="button" data-v="direto" class="ativa">Digitar KM</button>
+      <button type="button" data-v="odometro">Odômetro início/fim</button>
+    </div>
+    <div id="km-bloco-direto">
+      <label class="rotulo">KM rodados no mês *</label>
+      <input id="km-direto" inputmode="decimal" placeholder="Ex.: 1450">
+    </div>
+    <div id="km-bloco-odo" style="display:none">
+      <label class="rotulo">Odômetro no início do mês *</label>
+      <input id="km-odo-ini" inputmode="decimal" placeholder="Ex.: 24500">
+      <label class="rotulo">Odômetro no fim do mês *</label>
+      <input id="km-odo-fim" inputmode="decimal" placeholder="Ex.: 25980">
+      <div id="km-preview" style="font-weight:700;margin-top:8px;color:var(--primary)"></div>
+    </div>
+    <label class="rotulo">Observação (opcional)</label>
+    <input id="km-obs" placeholder="Ex.: inclui viagem a Curitiba">
+    <div class="erro-campo" id="erro-km"></div>
+    <button type="submit" class="botao">✓ Salvar quilometragem</button>
+  </form>
+</section>
+
+<!-- ==================== TELA: HISTÓRICO ==================== -->
+<section class="tela" id="tela-historico">
+  <h1>Histórico</h1>
+  <div class="subtitulo">Consulta e edição</div>
+  <div class="seg" id="hist-aba">
+    <button data-v="despesas" class="ativa">Despesas</button>
+    <button data-v="km">Quilometragem</button>
+  </div>
+  <div id="hist-bloco-despesas">
+    <input id="hist-busca" placeholder="🔍 Pesquisar descrição ou local…" style="margin-bottom:8px">
+    <div class="chips" id="hist-anos"></div>
+    <div class="chips" id="hist-meses"></div>
+    <div class="chips" id="hist-categorias"></div>
+    <div id="hist-lista" style="margin-top:10px"></div>
+  </div>
+  <div id="hist-bloco-km" style="display:none"></div>
+</section>
+
+<!-- ==================== TELA: RELATÓRIOS ==================== -->
+<section class="tela" id="tela-relatorios">
+  <h1>Relatórios</h1>
+  <div class="subtitulo">PDFs para reembolso e controle</div>
+  <div class="card">
+    <h2 style="margin-top:0">Modelo</h2>
+    <div class="seg" id="rel-tipo">
+      <button data-v="km" class="ativa">Relatório de KM</button>
+      <button data-v="completo">KM + Despesas</button>
+    </div>
+    <h2>Período</h2>
+    <div class="seg" id="rel-modo">
+      <button data-v="mes" class="ativa">Um mês</button>
+      <button data-v="intervalo">Intervalo de meses</button>
+    </div>
+    <label class="rotulo" id="rel-rotulo-ini">Mês do relatório</label>
+    <div class="chips" id="rel-anos-ini"></div>
+    <div class="chips" id="rel-meses-ini"></div>
+    <div id="rel-bloco-fim" style="display:none">
+      <label class="rotulo">Mês final</label>
+      <div class="chips" id="rel-anos-fim"></div>
+      <div class="chips" id="rel-meses-fim"></div>
+    </div>
+    <button class="botao" id="rel-gerar">📄 Gerar PDF</button>
+  </div>
+  <h2>Histórico de relatórios</h2>
+  <div id="rel-historico"></div>
+</section>
+
+<!-- ==================== TELA: CONFIGURAÇÕES ==================== -->
+<section class="tela" id="tela-config">
+  <h1>Configurações</h1>
+  <div class="subtitulo">Preferências e backup</div>
+  <div class="card">
+    <h2 style="margin-top:0">Veículo e reembolso</h2>
+    <label class="rotulo">Tarifa por KM (R$)</label>
+    <input id="cfg-tarifa" inputmode="decimal" placeholder="0,76">
+    <label class="rotulo">Nome do veículo</label>
+    <input id="cfg-veiculo" placeholder="Ex.: BYD Dolphin">
+    <label class="rotulo">Placa</label>
+    <input id="cfg-placa" placeholder="ABC1D23" style="text-transform:uppercase">
+    <label class="rotulo">Meta de KM por mês</label>
+    <input id="cfg-meta" inputmode="decimal" placeholder="Ex.: 1500">
+    <label class="rotulo">Custo da energia em casa (R$/kWh)</label>
+    <input id="cfg-kwh-casa" inputmode="decimal" placeholder="Ex.: 0,92">
+    <label class="rotulo">Situação pré-selecionada ao lançar despesa</label>
+    <div class="seg" id="cfg-padrao">
+      <button data-v="pago" class="ativa">Paga por mim</button>
+      <button data-v="reembolsado">Reembolsada</button>
+    </div>
+    <button class="botao" id="cfg-salvar">💾 Salvar preferências</button>
+  </div>
+  <div class="card">
+    <h2 style="margin-top:0">Aparência</h2>
+    <div class="seg" id="cfg-tema">
+      <button data-v="sistema">Sistema</button>
+      <button data-v="claro">Claro</button>
+      <button data-v="escuro">Escuro</button>
+    </div>
+  </div>
+  <div class="card">
+    <h2 style="margin-top:0">Backup</h2>
+    <p style="font-size:12px;color:var(--text2);margin-bottom:10px">
+      Os dados ficam somente neste aparelho. Exporte um arquivo JSON periodicamente.
+    </p>
+    <button class="botao tonal" id="bk-exportar" style="margin-top:0">⬇️ Exportar backup (JSON)</button>
+    <button class="botao contorno" id="bk-importar">📂 Importar backup</button>
+    <input type="file" id="bk-arquivo" accept=".json,application/json" style="display:none">
+  </div>
+  <div class="card">
+    <h2 style="margin-top:0">Zona de perigo</h2>
+    <button class="botao perigo" id="cfg-apagar" style="margin-top:0">🗑 Apagar todos os dados</button>
+  </div>
+  <div class="nota">Controle EV · dados 100% locais, sem internet<br>
+  💡 No iPhone: Safari → Compartilhar → <b>Adicionar à Tela de Início</b></div>
+</section>
+
+<!-- ==================== MODAIS ==================== -->
+<dialog id="modal-despesa">
+  <div class="modal-cab"><b>Editar despesa</b><button onclick="fecharModal('modal-despesa')">✕</button></div>
+  <div class="modal-corpo" id="modal-despesa-corpo"></div>
+</dialog>
+<dialog id="modal-km">
+  <div class="modal-cab"><b>Editar quilometragem</b><button onclick="fecharModal('modal-km')">✕</button></div>
+  <div class="modal-corpo" id="modal-km-corpo"></div>
+</dialog>
+
+<div id="toast"></div>
+
+<!-- ==================== NAVEGAÇÃO ==================== -->
+<nav id="nav">
+  <button data-tela="inicio" class="ativa"><span class="ico">🏠</span>Início</button>
+  <button data-tela="lancar"><span class="ico">➕</span>Lançar</button>
+  <button data-tela="historico"><span class="ico">🕐</span>Histórico</button>
+  <button data-tela="relatorios"><span class="ico">📄</span>Relatórios</button>
+  <button data-tela="config"><span class="ico">⚙️</span>Config.</button>
+</nav>
+
+<script>
+/* ================================================================
+   Controle EV — versão Web/PWA
+   Todos os dados ficam no localStorage do aparelho.
+   ================================================================ */
+'use strict';
+
+/* ---------------- armazenamento ---------------- */
+const DB = {
+  get(chave, padrao) {
+    try { const v = localStorage.getItem('cev_' + chave); return v === null ? padrao : JSON.parse(v); }
+    catch (e) { return padrao; }
+  },
+  set(chave, valor) { localStorage.setItem('cev_' + chave, JSON.stringify(valor)); },
+};
+
+let meses = DB.get('meses', null);        // [{id, ano, mes, km, odoIni, odoFim, obs}]
+let despesas = DB.get('despesas', null);  // [{id, data, categoria, valor, descricao, local, kwh, reembolso, foto}]
+let config = DB.get('config', null);
+let relatorios = DB.get('relatorios', []);// [{id, tipo, ini, fim, nome, em}]
+
+const CONFIG_PADRAO = {
+  tarifa_km: 0.76, nome_veiculo: '', placa: '', meta_km_mes: 0,
+  custo_energia_casa_kwh: 0, padrao_reembolso: 'pago', tema: 'sistema',
+};
+
+const CATEGORIAS = [
+  { id:'recarga_fora',  label:'Recarga fora',    ico:'⚡', cor:'#1E88E5' },
+  { id:'recarga_casa',  label:'Recarga em casa', ico:'🏠', cor:'#43A047' },
+  { id:'revisao',       label:'Revisão',         ico:'🔧', cor:'#FB8C00' },
+  { id:'pneus',         label:'Pneus',           ico:'🛞', cor:'#6D4C41' },
+  { id:'ipva',          label:'IPVA',            ico:'📋', cor:'#8E24AA' },
+  { id:'seguro',        label:'Seguro',          ico:'🛡️', cor:'#00ACC1' },
+  { id:'outros',        label:'Outros',          ico:'🏷️', cor:'#546E7A' },
+];
+const MESES_LABEL = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+const MESES_ABREV = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+
+const cat = (id) => CATEGORIAS.find(c => c.id === id) || CATEGORIAS[6];
+
+/* ---------------- utilitários ---------------- */
+function fmtMoeda(v) {
+  if (v === null || v === undefined || isNaN(v)) return 'R$ 0,00';
+  const neg = v < 0; const abs = Math.abs(v);
+  const [i, d] = abs.toFixed(2).split('.');
+  return (neg ? '-' : '') + 'R$ ' + i.replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ',' + d;
+}
+function fmtNum(v, casas = 0) {
+  if (v === null || v === undefined || isNaN(v)) return '0';
+  const [i, d] = Number(v).toFixed(casas).split('.');
+  const mi = i.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return d ? mi + ',' + d : mi;
+}
+function parseVal(t) {
+  if (t === null || t === undefined) return NaN;
+  let s = String(t).trim(); if (s === '') return NaN;
+  if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.');
+  const n = Number(s); return isFinite(n) ? n : NaN;
+}
+function fmtData(iso) { if (!iso) return '—'; const p = iso.split('-'); return `${p[2]}/${p[1]}/${p[0]}`; }
+function hojeISO() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+function mesRef(dataISO) { return dataISO.slice(0, 7); }
+function refDe(ano, mes) { return `${ano}-${String(mes).padStart(2,'0')}`; }
+function labelRef(ref) { const [a, m] = ref.split('-').map(Number); return `${MESES_LABEL[m-1]}/${a}`; }
+function novoId() { return Date.now() + Math.floor(Math.random() * 1000); }
+function corVar(nome) { return getComputedStyle(document.documentElement).getPropertyValue(nome).trim(); }
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('mostrar');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove('mostrar'), 2400);
+}
+
+/* ---------------- dados de demonstração (primeiro uso) ---------------- */
+function seed() {
+  const hoje = new Date();
+  const ms = [];
+  for (let i = 3; i >= 1; i--) {
+    const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
+    ms.push({ ano: d.getFullYear(), mes: d.getMonth() + 1 });
+  }
+  const kms = [1480, 1620, 1385];
+  let odo = 24500;
+  meses = ms.map((m, i) => {
+    const r = { id: novoId()+i, ano: m.ano, mes: m.mes, km: kms[i], odoIni: odo, odoFim: odo + kms[i], obs: 'Dados de demonstração' };
+    odo += kms[i]; return r;
+  });
+  const dia = (m, d) => `${refDe(m.ano, m.mes)}-${String(d).padStart(2,'0')}`;
+  const dd = [
+    [0,3,'recarga_casa',118.4,'Recarga noturna em casa',null,null,'pago'],
+    [0,7,'recarga_fora',64.9,'Recarga rápida na estrada','Eletroposto BR-101',38.5,'reembolsado'],
+    [0,12,'ipva',890,'Parcela 1/3 do IPVA',null,null,'pago'],
+    [0,18,'recarga_fora',52.3,'Recarga no shopping','Shopping Center Norte',30,'pago'],
+    [0,25,'outros',45,'Lavagem completa',null,null,'pago'],
+    [1,2,'recarga_casa',131.2,'Recargas em casa no mês',null,null,'pago'],
+    [1,9,'recarga_fora',71.8,'Recarga em viagem a trabalho','Posto Ipiranga km 220',42.1,'reembolsado'],
+    [1,14,'revisao',650,'Revisão de 30.000 km',null,null,'reembolsado'],
+    [1,20,'seguro',385.5,'Parcela mensal do seguro',null,null,'pago'],
+    [1,27,'recarga_fora',48.6,'Recarga rápida centro','Estação Recarga Centro',27.4,'pago'],
+    [2,4,'recarga_casa',109.7,'Recargas em casa no mês',null,null,'pago'],
+    [2,8,'pneus',1280,'Troca de 2 pneus dianteiros',null,null,'reembolsado'],
+    [2,15,'recarga_fora',59.4,'Recarga em visita a cliente','Eletroposto Av. Paulista',33.8,'reembolsado'],
+    [2,22,'seguro',385.5,'Parcela mensal do seguro',null,null,'pago'],
+    [2,28,'outros',89.9,'Palhetas do limpador',null,null,'pago'],
+  ];
+  despesas = dd.map((x, i) => ({
+    id: novoId()+100+i, data: dia(ms[x[0]], x[1]), categoria: x[2], valor: x[3],
+    descricao: x[4], local: x[5], kwh: x[6], reembolso: x[7], foto: null,
+  }));
+  config = { ...CONFIG_PADRAO, nome_veiculo: 'Meu Veículo Elétrico', placa: 'ABC1D23', meta_km_mes: 1500, custo_energia_casa_kwh: 0.92 };
+  relatorios = [
+    { id: novoId()+900, tipo:'km', ini: refDe(ms[0].ano, ms[0].mes), fim: refDe(ms[2].ano, ms[2].mes),
+      nome:`relatorio-km-${refDe(ms[0].ano,ms[0].mes)}-a-${refDe(ms[2].ano,ms[2].mes)}.pdf`, em: hojeISO() },
+    { id: novoId()+901, tipo:'completo', ini: refDe(ms[2].ano, ms[2].mes), fim: refDe(ms[2].ano, ms[2].mes),
+      nome:`relatorio-completo-${refDe(ms[2].ano,ms[2].mes)}.pdf`, em: hojeISO() },
+  ];
+  salvarTudo();
+}
+function salvarTudo() {
+  DB.set('meses', meses); DB.set('despesas', despesas);
+  DB.set('config', config); DB.set('relatorios', relatorios);
+}
+if (meses === null && despesas === null && config === null) seed();
+meses = meses || []; despesas = despesas || []; config = { ...CONFIG_PADRAO, ...(config || {}) };
+
+/* ---------------- tema ---------------- */
+function aplicarTema() {
+  const t = config.tema || 'sistema';
+  if (t === 'sistema') document.documentElement.removeAttribute('data-theme');
+  else document.documentElement.setAttribute('data-theme', t);
+  document.querySelectorAll('#cfg-tema button').forEach(b => b.classList.toggle('ativa', b.dataset.v === t));
+  // Redesenha os gráficos com as novas cores (somente após o app iniciar)
+  if (window.appPronto && document.getElementById('tela-inicio').classList.contains('ativa')) renderPainel();
+}
+aplicarTema();
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', aplicarTema);
+
+/* ---------------- navegação entre telas ---------------- */
+function irPara(tela) {
+  document.querySelectorAll('.tela').forEach(t => t.classList.remove('ativa'));
+  document.getElementById('tela-' + tela).classList.add('ativa');
+  document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('ativa', b.dataset.tela === tela));
+  window.scrollTo(0, 0);
+  if (tela === 'inicio') renderPainel();
+  if (tela === 'historico') renderHistorico();
+  if (tela === 'relatorios') renderRelatorios();
+  if (tela === 'config') renderConfig();
+  if (tela === 'lancar') prepararLancar();
+}
+document.querySelectorAll('#nav button').forEach(b => b.onclick = () => irPara(b.dataset.tela));
+
+/* ---------------- consultas ---------------- */
+function anosDisponiveis() {
+  const s = new Set([new Date().getFullYear()]);
+  meses.forEach(m => s.add(m.ano));
+  despesas.forEach(d => s.add(Number(d.data.slice(0, 4))));
+  return [...s].sort((a, b) => b - a);
+}
+function kmDoMes(ano, mes) { const r = meses.find(m => m.ano === ano && m.mes === mes); return r ? r.km : 0; }
+function despesasDoRef(ref) { return despesas.filter(d => mesRef(d.data) === ref); }
+
+/* ---------------- chips genéricos ---------------- */
+function renderChips(el, opcoes, valorAtual, onSel) {
+  el.innerHTML = '';
+  opcoes.forEach(op => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'chip' + (op.id === valorAtual ? ' ativa' : '');
+    b.textContent = (op.ico ? op.ico + ' ' : '') + op.label;
+    b.onclick = () => onSel(op.id);
+    el.appendChild(b);
+  });
+  // Mantém o chip selecionado visível (rolagem apenas horizontal)
+  const ativo = el.querySelector('.ativa');
+  if (ativo) el.scrollLeft = Math.max(0, ativo.offsetLeft - el.clientWidth / 2 + ativo.clientWidth / 2);
+}
+function chipsAnos(el, atual, onSel) { renderChips(el, anosDisponiveis().map(a => ({ id: a, label: String(a) })), atual, onSel); }
+function chipsMeses(el, atual, onSel, comTodos, rotuloTodos) {
+  const ops = MESES_ABREV.map((m, i) => ({ id: i + 1, label: m }));
+  if (comTodos) ops.unshift({ id: null, label: rotuloTodos || 'Todos' });
+  renderChips(el, ops, atual, onSel);
+}
+function ligarSeg(idSeg, onSel) {
+  const seg = document.getElementById(idSeg);
+  seg.querySelectorAll('button').forEach(b => b.onclick = () => {
+    seg.querySelectorAll('button').forEach(x => x.classList.remove('ativa'));
+    b.classList.add('ativa'); onSel(b.dataset.v);
+  });
+}
+function valorSeg(idSeg) { return document.getElementById(idSeg).querySelector('button.ativa').dataset.v; }
+function setSeg(idSeg, v) {
+  document.querySelectorAll('#' + idSeg + ' button').forEach(b => b.classList.toggle('ativa', b.dataset.v === v));
+}
+
+/* ================================================================
+   PAINEL (Início)
+   ================================================================ */
+const hoje = new Date();
+let pAno = hoje.getFullYear(), pMes = hoje.getMonth() + 1;
+
+function indicadores(ano, mes) {
+  const ref = refDe(ano, mes);
+  const km = kmDoMes(ano, mes);
+  const dm = despesasDoRef(ref);
+  const total = dm.reduce((s, d) => s + d.valor, 0);
+  const reemb = dm.filter(d => d.reembolso === 'reembolsado').reduce((s, d) => s + d.valor, 0);
+  const porCat = {};
+  dm.forEach(d => porCat[d.categoria] = (porCat[d.categoria] || 0) + d.valor);
+  // Últimos 12 meses de recarga fora
+  const serie12 = [];
+  let a = ano, m = mes;
+  for (let i = 0; i < 12; i++) { serie12.unshift({ ano: a, mes: m, ref: refDe(a, m) }); m--; if (m === 0) { m = 12; a--; } }
+  serie12.forEach(x => {
+    x.total = despesas.filter(d => d.categoria === 'recarga_fora' && mesRef(d.data) === x.ref)
+      .reduce((s, d) => s + d.valor, 0);
+  });
+  return {
+    km, reembolsoKm: km * config.tarifa_km, total, reemb, pago: total - reemb,
+    custoPorKm: km > 0 ? total / km : null, // NUNCA divide por zero
+    porCat, serie12,
+  };
+}
+
+function renderPainel() {
+  document.getElementById('painel-veiculo').textContent =
+    config.nome_veiculo ? `${config.nome_veiculo}${config.placa ? ' · ' + config.placa : ''}` : 'Seu veículo elétrico';
+  chipsAnos(document.getElementById('painel-anos'), pAno, a => { pAno = a; renderPainel(); });
+  chipsMeses(document.getElementById('painel-meses'), pMes, m => { pMes = m; renderPainel(); });
+
+  const ind = indicadores(pAno, pMes);
+  const kpis = [
+    ['KM rodados', fmtNum(ind.km) + ' km'],
+    ['Reembolso de KM', fmtMoeda(ind.reembolsoKm)],
+    ['Total de despesas', fmtMoeda(ind.total)],
+    ['Total reembolsável', fmtMoeda(ind.reemb)],
+    ['Pago por mim', fmtMoeda(ind.pago)],
+    ['Custo por KM', ind.custoPorKm === null ? '—' : fmtMoeda(ind.custoPorKm)],
+  ];
+  document.getElementById('painel-kpis').innerHTML =
+    kpis.map(k => `<div class="kpi"><div class="r">${k[0]}</div><div class="v">${k[1]}</div></div>`).join('');
+
+  // Meta mensal
+  const elMeta = document.getElementById('painel-meta');
+  if (config.meta_km_mes > 0) {
+    const pct = Math.min(100, ind.km / config.meta_km_mes * 100);
+    elMeta.style.display = 'block';
+    elMeta.innerHTML = `<div style="font-size:12px;color:var(--text2)">Meta do mês: ${fmtNum(config.meta_km_mes)} km</div>
+      <div class="meta-barra"><div style="width:${pct}%"></div></div>
+      <div style="font-size:11px;color:var(--text2);margin-top:4px">${fmtNum(pct)}% da meta</div>`;
+  } else elMeta.style.display = 'none';
+
+  // Gráficos
+  desenharBarras12(ind.serie12);
+  desenharPizza(ind);
+  desenharComparativo(ind);
+
+  // Últimos lançamentos do mês
+  const ult = despesasDoRef(refDe(pAno, pMes)).sort((a, b) => b.data.localeCompare(a.data) || b.id - a.id).slice(0, 8);
+  document.getElementById('painel-ultimos').innerHTML = ult.length
+    ? ult.map(d => htmlItemDespesa(d, false)).join('')
+    : `<div class="card"><div class="vazio"><span class="ico">🧾</span><b>Nenhum lançamento neste mês</b><span>Toque em Lançar para registrar despesas ou quilometragem.</span></div></div>`;
+  ligarAcoesDespesa(document.getElementById('painel-ultimos'), () => renderPainel());
+}
+
+/* ---------------- gráficos em canvas (sem bibliotecas) ---------------- */
+function prepararCanvas(cv, altura) {
+  const dpr = window.devicePixelRatio || 1;
+  const w = cv.clientWidth || cv.parentElement.clientWidth;
+  const h = altura || cv.clientHeight || 180;
+  cv.width = w * dpr; cv.height = h * dpr;
+  const ctx = cv.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  return { ctx, w, h };
+}
+
+function desenharBarras12(serie) {
+  const wrap = document.getElementById('wrap-graf-barras');
+  const temDados = serie.some(s => s.total > 0);
+  if (!temDados) {
+    wrap.innerHTML = `<div class="vazio"><span class="ico">⚡</span><b>Sem recargas fora de casa</b><span>Nenhum gasto nos últimos 12 meses.</span></div>`;
+    return;
+  }
+  if (!wrap.querySelector('canvas')) wrap.innerHTML = '<canvas class="grafico" id="graf-barras"></canvas>';
+  const { ctx, w, h } = prepararCanvas(document.getElementById('graf-barras'), 180);
+  const max = Math.max(...serie.map(s => s.total)) * 1.15;
+  const mEsq = 8, mBaixo = 22, mTopo = 14;
+  const areaW = w - mEsq * 2, areaH = h - mBaixo - mTopo;
+  const bw = areaW / serie.length * 0.55;
+  ctx.font = '9px sans-serif';
+  serie.forEach((s, i) => {
+    const x = mEsq + areaW / serie.length * (i + 0.5);
+    const bh = max > 0 ? s.total / max * areaH : 0;
+    const atual = s.ano === pAno && s.mes === pMes;
+    ctx.fillStyle = corVar('--primary') + (atual ? '' : '88');
+    const y = mTopo + areaH - bh;
+    ctx.beginPath(); ctx.roundRect(x - bw / 2, y, bw, bh, 3); ctx.fill();
+    ctx.fillStyle = corVar('--text2');
+    ctx.textAlign = 'center';
+    ctx.fillText(MESES_ABREV[s.mes - 1], x, h - 8);
+    if (s.total > 0) {
+      ctx.font = '8px sans-serif';
+      ctx.fillText(Math.round(s.total), x, y - 3);
+      ctx.font = '9px sans-serif';
+    }
+  });
+}
+
+function desenharPizza(ind) {
+  document.getElementById('titulo-pizza').textContent = `Despesas de ${MESES_LABEL[pMes - 1]} por categoria`;
+  const wrap = document.getElementById('wrap-graf-pizza');
+  const entradas = Object.entries(ind.porCat).sort((a, b) => b[1] - a[1]);
+  if (!entradas.length) {
+    wrap.innerHTML = `<div class="vazio" style="width:100%"><span class="ico">🥧</span><b>Sem despesas neste mês</b><span>Use a aba Lançar para registrar a primeira despesa.</span></div>`;
+    return;
+  }
+  if (!wrap.querySelector('canvas')) {
+    wrap.innerHTML = `<canvas id="graf-pizza" style="width:150px;height:150px;flex-shrink:0"></canvas><div class="legenda" id="legenda-pizza" style="flex:1"></div>`;
+  }
+  const cv = document.getElementById('graf-pizza');
+  const dpr = window.devicePixelRatio || 1;
+  cv.width = 150 * dpr; cv.height = 150 * dpr;
+  const ctx = cv.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, 150, 150);
+  const cx = 75, cy = 75, R = 70, r = 42;
+  let ang = -Math.PI / 2;
+  entradas.forEach(([id, v]) => {
+    const frac = v / ind.total;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, R, ang, ang + frac * Math.PI * 2);
+    ctx.closePath();
+    ctx.fillStyle = cat(id).cor;
+    ctx.fill();
+    ang += frac * Math.PI * 2;
+  });
+  // Furo central (rosquinha)
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = corVar('--text2');
+  ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'center';
+  ctx.fillText(fmtMoeda(ind.total), cx, cy + 4);
+
+  document.getElementById('legenda-pizza').innerHTML = entradas.map(([id, v]) =>
+    `<div><i style="background:${cat(id).cor}"></i><span>${cat(id).label}</span><b>${fmtMoeda(v)}</b></div>`
+  ).join('');
+}
+
+function desenharComparativo(ind) {
+  const wrap = document.getElementById('wrap-graf-comp');
+  if (ind.total <= 0) {
+    wrap.innerHTML = `<div class="vazio"><span class="ico">↔️</span><b>Nada a comparar</b><span>Registre despesas para ver a comparação.</span></div>`;
+    return;
+  }
+  if (!wrap.querySelector('canvas')) wrap.innerHTML = '<canvas class="grafico" id="graf-comp"></canvas>';
+  const { ctx, w, h } = prepararCanvas(document.getElementById('graf-comp'), 150);
+  const dados = [
+    { label: 'Reembolsado', v: ind.reemb, cor: corVar('--primary') },
+    { label: 'Pago por mim', v: ind.pago, cor: corVar('--laranja') },
+  ];
+  const max = Math.max(...dados.map(d => d.v)) * 1.2 || 1;
+  const mBaixo = 24, mTopo = 18;
+  const areaH = h - mBaixo - mTopo;
+  const bw = Math.min(80, w / 4);
+  dados.forEach((d, i) => {
+    const x = w / 2 + (i === 0 ? -1 : 1) * (bw * 0.9);
+    const bh = d.v / max * areaH;
+    ctx.fillStyle = d.cor;
+    ctx.beginPath(); ctx.roundRect(x - bw / 2, mTopo + areaH - bh, bw, Math.max(bh, 2), 5); ctx.fill();
+    ctx.fillStyle = corVar('--text');
+    ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(fmtMoeda(d.v), x, mTopo + areaH - bh - 5);
+    ctx.fillStyle = corVar('--text2');
+    ctx.font = '11px sans-serif';
+    ctx.fillText(d.label, x, h - 7);
+  });
+}
+
+/* ---------------- item de despesa (HTML) ---------------- */
+function htmlItemDespesa(d, comDuplicar) {
+  const c = cat(d.categoria);
+  const extra = [fmtData(d.data), c.label, d.local, d.kwh ? d.kwh + ' kWh' : null].filter(Boolean).join(' · ');
+  return `<div class="item" data-id="${d.id}">
+    <div class="linha1">
+      <div class="ico-cat" style="background:${c.cor}22">${c.ico}</div>
+      <div class="meio">
+        <div class="titulo">${escapar(d.descricao || c.label)}</div>
+        <div class="detalhe">${escapar(extra)}</div>
+      </div>
+      <div>
+        <div class="valor">${fmtMoeda(d.valor)}</div>
+        <span class="badge ${d.reembolso === 'reembolsado' ? 'reemb' : 'pago'}">
+          ${d.reembolso === 'reembolsado' ? 'Reembolsada' : 'Paga por mim'}</span>
+      </div>
+    </div>
+    <div class="acoes">
+      ${d.foto ? `<button data-acao="foto">📷 Foto</button>` : ''}
+      <button data-acao="editar">✏️ Editar</button>
+      ${comDuplicar ? '<button data-acao="duplicar">📑 Duplicar</button>' : ''}
+      <button data-acao="excluir" class="perigo">🗑 Excluir</button>
+    </div>
+  </div>`;
+}
+function escapar(t) { const d = document.createElement('div'); d.textContent = t ?? ''; return d.innerHTML; }
+
+function ligarAcoesDespesa(container, aoMudar) {
+  container.querySelectorAll('.item').forEach(el => {
+    const id = Number(el.dataset.id);
+    el.querySelectorAll('button[data-acao]').forEach(b => {
+      b.onclick = () => {
+        const d = despesas.find(x => x.id === id);
+        if (!d) return;
+        if (b.dataset.acao === 'editar') abrirEdicaoDespesa(d, aoMudar);
+        if (b.dataset.acao === 'foto') { const w = window.open(); if (w) w.document.write(`<img src="${d.foto}" style="max-width:100%">`); }
+        if (b.dataset.acao === 'duplicar') {
+          despesas.push({ ...d, id: novoId(), foto: null });
+          salvarTudo(); toast('📑 Despesa duplicada!'); aoMudar();
+        }
+        if (b.dataset.acao === 'excluir') {
+          if (confirm('Deseja realmente excluir este lançamento?')) {
+            despesas = despesas.filter(x => x.id !== id);
+            salvarTudo(); toast('🗑 Despesa excluída.'); aoMudar();
+          }
+        }
+      };
+    });
+  });
+}
+
+/* ================================================================
+   LANÇAR
+   ================================================================ */
+let lancCategoria = 'recarga_fora';
+let lancFoto = null;
+let kmAno = hoje.getFullYear(), kmMes = hoje.getMonth() + 1;
+
+function prepararLancar() {
+  renderChips(document.getElementById('desp-categorias'),
+    CATEGORIAS.map(c => ({ id: c.id, label: c.label, ico: c.ico })), lancCategoria,
+    id => { lancCategoria = id; prepararLancar(); });
+  // Regra: recarga_casa NUNCA mostra kWh nem local; só recarga_fora mostra
+  document.getElementById('desp-extra-fora').style.display = lancCategoria === 'recarga_fora' ? 'block' : 'none';
+  if (!document.getElementById('desp-data').value) document.getElementById('desp-data').value = hojeISO();
+  setSeg('desp-situacao', document.getElementById('desp-situacao').dataset.tocado ? valorSeg('desp-situacao') : config.padrao_reembolso);
+  chipsAnos(document.getElementById('km-anos'), kmAno, a => { kmAno = a; prepararLancar(); });
+  chipsMeses(document.getElementById('km-meses'), kmMes, m => { kmMes = m; prepararLancar(); });
+}
+
+ligarSeg('lancar-tipo', v => {
+  document.getElementById('form-despesa').style.display = v === 'despesa' ? 'block' : 'none';
+  document.getElementById('form-km').style.display = v === 'km' ? 'block' : 'none';
+});
+ligarSeg('desp-situacao', () => { document.getElementById('desp-situacao').dataset.tocado = '1'; });
+ligarSeg('km-metodo', v => {
+  document.getElementById('km-bloco-direto').style.display = v === 'direto' ? 'block' : 'none';
+  document.getElementById('km-bloco-odo').style.display = v === 'odometro' ? 'block' : 'none';
+});
+
+// Prévia do cálculo pelo odômetro
+['km-odo-ini', 'km-odo-fim'].forEach(id => {
+  document.getElementById(id).addEventListener('input', () => {
+    const i = parseVal(document.getElementById('km-odo-ini').value);
+    const f = parseVal(document.getElementById('km-odo-fim').value);
+    const el = document.getElementById('km-preview');
+    if (isNaN(i) || isNaN(f)) { el.textContent = ''; return; }
+    if (f < i) { el.textContent = '⚠️ O odômetro final é menor que o inicial.'; el.style.color = 'var(--danger)'; }
+    else { el.textContent = `KM calculados: ${fmtNum(f - i)} km`; el.style.color = 'var(--primary)'; }
+  });
+});
+
+// Foto do comprovante (redimensionada para caber no armazenamento)
+document.getElementById('desp-foto-input').addEventListener('change', async (e) => {
+  const arq = e.target.files[0]; if (!arq) return;
+  try {
+    lancFoto = await redimensionarFoto(arq);
+    const img = document.getElementById('desp-foto-prev');
+    img.src = lancFoto; img.style.display = 'block';
+    document.getElementById('desp-foto-remover').style.display = 'inline-block';
+  } catch (err) { alert('Não foi possível anexar a foto.'); }
+});
+document.getElementById('desp-foto-remover').onclick = () => {
+  lancFoto = null;
+  document.getElementById('desp-foto-prev').style.display = 'none';
+  document.getElementById('desp-foto-remover').style.display = 'none';
+  document.getElementById('desp-foto-input').value = '';
+};
+function redimensionarFoto(arquivo) {
+  return new Promise((res, rej) => {
+    const img = new Image();
+    img.onload = () => {
+      const MAX = 800;
+      const esc = Math.min(1, MAX / Math.max(img.width, img.height));
+      const cv = document.createElement('canvas');
+      cv.width = img.width * esc; cv.height = img.height * esc;
+      cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+      res(cv.toDataURL('image/jpeg', 0.7));
+    };
+    img.onerror = rej;
+    img.src = URL.createObjectURL(arquivo);
+  });
+}
+
+// Validação e gravação da despesa
+function validarDespesa(valorTxt, dataISO) {
+  const v = parseVal(valorTxt);
+  let erroV = '', erroD = '';
+  if (String(valorTxt).trim() === '') erroV = 'Informe o valor.';
+  else if (isNaN(v)) erroV = 'Valor inválido.';
+  else if (v < 0) erroV = 'O valor não pode ser negativo.';
+  else if (v === 0) erroV = 'O valor não pode ser zero.';
+  if (!dataISO || !/^\d{4}-\d{2}-\d{2}$/.test(dataISO)) erroD = 'Informe uma data válida.';
+  return { v, erroV, erroD };
+}
+
+document.getElementById('form-despesa').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const { v, erroV, erroD } = validarDespesa(
+    document.getElementById('desp-valor').value,
+    document.getElementById('desp-data').value
+  );
+  document.getElementById('erro-valor').textContent = erroV;
+  document.getElementById('erro-data').textContent = erroD;
+  if (erroV || erroD) return;
+
+  const ehFora = lancCategoria === 'recarga_fora';
+  let kwh = null;
+  if (ehFora && document.getElementById('desp-kwh').value.trim() !== '') {
+    kwh = parseVal(document.getElementById('desp-kwh').value);
+    if (isNaN(kwh) || kwh < 0) kwh = null; // opcional: inválido é descartado
+  }
+  despesas.push({
+    id: novoId(),
+    data: document.getElementById('desp-data').value,
+    categoria: lancCategoria,
+    valor: v,
+    descricao: document.getElementById('desp-descricao').value.trim() || null,
+    local: ehFora ? (document.getElementById('desp-local').value.trim() || null) : null,
+    kwh: ehFora ? kwh : null, // recarga_casa NUNCA grava kWh
+    reembolso: valorSeg('desp-situacao'),
+    foto: lancFoto,
+  });
+  salvarTudo();
+  // Limpa o formulário para o próximo lançamento
+  document.getElementById('desp-valor').value = '';
+  document.getElementById('desp-descricao').value = '';
+  document.getElementById('desp-local').value = '';
+  document.getElementById('desp-kwh').value = '';
+  document.getElementById('desp-foto-remover').onclick();
+  toast('✅ Despesa salva!');
+});
+
+// Validação e gravação da quilometragem (ano+mês único)
+document.getElementById('form-km').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const elErro = document.getElementById('erro-km');
+  elErro.textContent = '';
+  let km, odoIni = null, odoFim = null;
+  if (valorSeg('km-metodo') === 'direto') {
+    km = parseVal(document.getElementById('km-direto').value);
+    if (isNaN(km)) return elErro.textContent = 'Informe os KM rodados.';
+    if (km < 0) return elErro.textContent = 'Os quilômetros não podem ser negativos.';
+  } else {
+    odoIni = parseVal(document.getElementById('km-odo-ini').value);
+    odoFim = parseVal(document.getElementById('km-odo-fim').value);
+    if (isNaN(odoIni) || isNaN(odoFim)) return elErro.textContent = 'Informe o odômetro inicial e o final.';
+    if (odoIni < 0 || odoFim < 0) return elErro.textContent = 'O odômetro não pode ser negativo.';
+    if (odoFim < odoIni) return elErro.textContent = 'O odômetro final deve ser maior ou igual ao inicial.';
+    km = odoFim - odoIni;
+  }
+  const obs = document.getElementById('km-obs').value.trim() || null;
+  const existente = meses.find(m => m.ano === kmAno && m.mes === kmMes);
+  if (existente) Object.assign(existente, { km, odoIni, odoFim, obs });
+  else meses.push({ id: novoId(), ano: kmAno, mes: kmMes, km, odoIni, odoFim, obs });
+  salvarTudo();
+  document.getElementById('km-direto').value = '';
+  document.getElementById('km-odo-ini').value = '';
+  document.getElementById('km-odo-fim').value = '';
+  document.getElementById('km-obs').value = '';
+  document.getElementById('km-preview').textContent = '';
+  toast(`✅ ${fmtNum(km)} km salvos em ${MESES_ABREV[kmMes - 1]}/${kmAno}!`);
+});
+
+/* ================================================================
+   MODAL: edição de despesa
+   ================================================================ */
+function abrirEdicaoDespesa(d, aoMudar) {
+  const corpo = document.getElementById('modal-despesa-corpo');
+  const ehFora = () => corpo.dataset.cat === 'recarga_fora';
+  corpo.dataset.cat = d.categoria;
+  corpo.innerHTML = `
+    <label class="rotulo">Categoria</label><div class="chips" id="ed-cats"></div>
+    <label class="rotulo">Valor (R$) *</label>
+    <input id="ed-valor" inputmode="decimal" value="${String(d.valor).replace('.', ',')}">
+    <div class="erro-campo" id="ed-erro"></div>
+    <label class="rotulo">Data *</label>
+    <input id="ed-data" type="date" value="${d.data}">
+    <div id="ed-extra" style="display:${d.categoria === 'recarga_fora' ? 'block' : 'none'}">
+      <label class="rotulo">Energia (kWh) — opcional</label>
+      <input id="ed-kwh" inputmode="decimal" value="${d.kwh ?? ''}">
+      <label class="rotulo">Local — opcional</label>
+      <input id="ed-local" value="${escapar(d.local || '')}">
+    </div>
+    <label class="rotulo">Descrição</label>
+    <input id="ed-desc" value="${escapar(d.descricao || '')}">
+    <label class="rotulo">Situação *</label>
+    <div class="seg" id="ed-sit">
+      <button type="button" data-v="pago" class="${d.reembolso === 'pago' ? 'ativa' : ''}">Paga por mim</button>
+      <button type="button" data-v="reembolsado" class="${d.reembolso === 'reembolsado' ? 'ativa' : ''}">Reembolsada</button>
+    </div>
+    <button class="botao" id="ed-salvar">✓ Salvar alterações</button>`;
+
+  renderChips(corpo.querySelector('#ed-cats'),
+    CATEGORIAS.map(c => ({ id: c.id, label: c.label, ico: c.ico })), d.categoria,
+    id => {
+      corpo.dataset.cat = id;
+      renderChips(corpo.querySelector('#ed-cats'),
+        CATEGORIAS.map(c => ({ id: c.id, label: c.label, ico: c.ico })), id, () => {});
+      // Reaproveita o mesmo handler reabrindo a edição com a nova categoria
+      abrirEdicaoDespesa({ ...coletar(), id: d.id, foto: d.foto, categoria: id }, aoMudar);
+    });
+  ligarSeg('ed-sit', () => {});
+
+  function coletar() {
+    return {
+      data: corpo.querySelector('#ed-data').value,
+      categoria: corpo.dataset.cat,
+      valor: parseVal(corpo.querySelector('#ed-valor').value),
+      descricao: corpo.querySelector('#ed-desc').value.trim() || null,
+      local: ehFora() ? (corpo.querySelector('#ed-local')?.value.trim() || null) : null,
+      kwh: ehFora() ? (parseVal(corpo.querySelector('#ed-kwh')?.value) || null) : null,
+      reembolso: corpo.querySelector('#ed-sit button.ativa').dataset.v,
+    };
+  }
+
+  corpo.querySelector('#ed-salvar').onclick = () => {
+    const novo = coletar();
+    const { erroV, erroD } = validarDespesa(corpo.querySelector('#ed-valor').value, novo.data);
+    if (erroV || erroD) { corpo.querySelector('#ed-erro').textContent = erroV || erroD; return; }
+    if (novo.kwh !== null && (isNaN(novo.kwh) || novo.kwh < 0)) novo.kwh = null;
+    const alvo = despesas.find(x => x.id === d.id);
+    Object.assign(alvo, novo);
+    salvarTudo(); fecharModal('modal-despesa'); toast('✅ Despesa atualizada!'); aoMudar();
+  };
+  document.getElementById('modal-despesa').showModal();
+}
+function fecharModal(id) { document.getElementById(id).close(); }
+
+/* ================================================================
+   HISTÓRICO
+   ================================================================ */
+let hAno = hoje.getFullYear(), hMes = null, hCat = null;
+
+ligarSeg('hist-aba', v => {
+  document.getElementById('hist-bloco-despesas').style.display = v === 'despesas' ? 'block' : 'none';
+  document.getElementById('hist-bloco-km').style.display = v === 'km' ? 'block' : 'none';
+  renderHistorico();
+});
+document.getElementById('hist-busca').addEventListener('input', () => renderHistorico());
+
+function renderHistorico() {
+  chipsAnos(document.getElementById('hist-anos'), hAno, a => { hAno = a; renderHistorico(); });
+  chipsMeses(document.getElementById('hist-meses'), hMes, m => { hMes = m; renderHistorico(); }, true, 'Ano todo');
+  renderChips(document.getElementById('hist-categorias'),
+    [{ id: null, label: 'Todas' }, ...CATEGORIAS.map(c => ({ id: c.id, label: c.label, ico: c.ico }))],
+    hCat, id => { hCat = id; renderHistorico(); });
+
+  // Despesas filtradas, mais recentes primeiro
+  const busca = document.getElementById('hist-busca').value.trim().toLowerCase();
+  let lista = despesas.filter(d => {
+    const [a, m] = d.data.split('-').map(Number);
+    if (a !== hAno) return false;
+    if (hMes && m !== hMes) return false;
+    if (hCat && d.categoria !== hCat) return false;
+    if (busca && !((d.descricao || '').toLowerCase().includes(busca) || (d.local || '').toLowerCase().includes(busca))) return false;
+    return true;
+  }).sort((a, b) => b.data.localeCompare(a.data) || b.id - a.id);
+
+  document.getElementById('hist-lista').innerHTML = lista.length
+    ? lista.map(d => htmlItemDespesa(d, true)).join('')
+    : `<div class="card"><div class="vazio"><span class="ico">🔍</span><b>Nenhuma despesa encontrada</b><span>Ajuste os filtros ou registre uma nova despesa.</span></div></div>`;
+  ligarAcoesDespesa(document.getElementById('hist-lista'), renderHistorico);
+
+  // Quilometragem
+  const ms = [...meses].sort((a, b) => (b.ano - a.ano) || (b.mes - a.mes));
+  document.getElementById('hist-bloco-km').innerHTML = ms.length
+    ? ms.map(m => `<div class="item" data-kmid="${m.id}">
+        <div class="linha1">
+          <div class="ico-cat" style="background:var(--primary-cont)">🚗</div>
+          <div class="meio">
+            <div class="titulo">${MESES_LABEL[m.mes - 1]}/${m.ano}</div>
+            <div class="detalhe">${m.odoIni != null ? `Odômetro: ${fmtNum(m.odoIni)} → ${fmtNum(m.odoFim)}` : 'KM digitados manualmente'}${m.obs ? ' · ' + escapar(m.obs) : ''}</div>
+          </div>
+          <div class="valor" style="color:var(--primary)">${fmtNum(m.km)} km</div>
+        </div>
+        <div class="acoes">
+          <button data-acao="editar">✏️ Editar</button>
+          <button data-acao="excluir" class="perigo">🗑 Excluir</button>
+        </div>
+      </div>`).join('')
+    : `<div class="card"><div class="vazio"><span class="ico">🚗</span><b>Nenhum mês registrado</b><span>Registre a quilometragem na aba Lançar.</span></div></div>`;
+
+  document.getElementById('hist-bloco-km').querySelectorAll('.item').forEach(el => {
+    const id = Number(el.dataset.kmid);
+    el.querySelector('[data-acao="editar"]').onclick = () => abrirEdicaoKm(meses.find(m => m.id === id));
+    el.querySelector('[data-acao="excluir"]').onclick = () => {
+      const m = meses.find(x => x.id === id);
+      if (confirm(`Excluir o registro de ${MESES_LABEL[m.mes - 1]}/${m.ano}?`)) {
+        meses = meses.filter(x => x.id !== id);
+        salvarTudo(); renderHistorico(); toast('🗑 Registro excluído.');
+      }
+    };
+  });
+}
+
+function abrirEdicaoKm(m) {
+  const corpo = document.getElementById('modal-km-corpo');
+  const usaOdo = m.odoIni != null;
+  corpo.innerHTML = `
+    <div style="font-weight:700;margin-bottom:6px">${MESES_LABEL[m.mes - 1]}/${m.ano}</div>
+    <div class="seg" id="edk-metodo">
+      <button type="button" data-v="direto" class="${usaOdo ? '' : 'ativa'}">Digitar KM</button>
+      <button type="button" data-v="odometro" class="${usaOdo ? 'ativa' : ''}">Odômetro início/fim</button>
+    </div>
+    <div id="edk-direto" style="display:${usaOdo ? 'none' : 'block'}">
+      <label class="rotulo">KM rodados no mês *</label>
+      <input id="edk-km" inputmode="decimal" value="${usaOdo ? '' : String(m.km).replace('.', ',')}">
+    </div>
+    <div id="edk-odo" style="display:${usaOdo ? 'block' : 'none'}">
+      <label class="rotulo">Odômetro no início *</label>
+      <input id="edk-ini" inputmode="decimal" value="${m.odoIni ?? ''}">
+      <label class="rotulo">Odômetro no fim *</label>
+      <input id="edk-fim" inputmode="decimal" value="${m.odoFim ?? ''}">
+    </div>
+    <label class="rotulo">Observação</label>
+    <input id="edk-obs" value="${escapar(m.obs || '')}">
+    <div class="erro-campo" id="edk-erro"></div>
+    <button class="botao" id="edk-salvar">✓ Salvar</button>`;
+  ligarSeg('edk-metodo', v => {
+    corpo.querySelector('#edk-direto').style.display = v === 'direto' ? 'block' : 'none';
+    corpo.querySelector('#edk-odo').style.display = v === 'odometro' ? 'block' : 'none';
+  });
+  corpo.querySelector('#edk-salvar').onclick = () => {
+    const erro = corpo.querySelector('#edk-erro');
+    erro.textContent = '';
+    if (corpo.querySelector('#edk-metodo button.ativa').dataset.v === 'direto') {
+      const km = parseVal(corpo.querySelector('#edk-km').value);
+      if (isNaN(km)) return erro.textContent = 'Informe os KM rodados.';
+      if (km < 0) return erro.textContent = 'Os quilômetros não podem ser negativos.';
+      Object.assign(m, { km, odoIni: null, odoFim: null });
+    } else {
+      const i = parseVal(corpo.querySelector('#edk-ini').value);
+      const f = parseVal(corpo.querySelector('#edk-fim').value);
+      if (isNaN(i) || isNaN(f)) return erro.textContent = 'Informe o odômetro inicial e o final.';
+      if (i < 0 || f < 0) return erro.textContent = 'O odômetro não pode ser negativo.';
+      if (f < i) return erro.textContent = 'O odômetro final deve ser maior ou igual ao inicial.';
+      Object.assign(m, { km: f - i, odoIni: i, odoFim: f });
+    }
+    m.obs = corpo.querySelector('#edk-obs').value.trim() || null;
+    salvarTudo(); fecharModal('modal-km'); renderHistorico(); toast('✅ Quilometragem atualizada!');
+  };
+  document.getElementById('modal-km').showModal();
+}
+
+/* ================================================================
+   RELATÓRIOS (jsPDF — 100% no aparelho)
+   ================================================================ */
+let rAnoIni = hoje.getFullYear(), rMesIni = hoje.getMonth() + 1;
+let rAnoFim = hoje.getFullYear(), rMesFim = hoje.getMonth() + 1;
+
+ligarSeg('rel-tipo', () => {});
+ligarSeg('rel-modo', v => {
+  document.getElementById('rel-bloco-fim').style.display = v === 'intervalo' ? 'block' : 'none';
+  document.getElementById('rel-rotulo-ini').textContent = v === 'intervalo' ? 'Mês inicial' : 'Mês do relatório';
+});
+
+function renderRelatorios() {
+  chipsAnos(document.getElementById('rel-anos-ini'), rAnoIni, a => { rAnoIni = a; renderRelatorios(); });
+  chipsMeses(document.getElementById('rel-meses-ini'), rMesIni, m => { rMesIni = m; renderRelatorios(); });
+  chipsAnos(document.getElementById('rel-anos-fim'), rAnoFim, a => { rAnoFim = a; renderRelatorios(); });
+  chipsMeses(document.getElementById('rel-meses-fim'), rMesFim, m => { rMesFim = m; renderRelatorios(); });
+
+  const hist = [...relatorios].sort((a, b) => b.id - a.id);
+  document.getElementById('rel-historico').innerHTML = hist.length
+    ? hist.map(r => `<div class="item" data-relid="${r.id}">
+        <div class="linha1">
+          <div class="ico-cat" style="background:var(--primary-cont)">${r.tipo === 'km' ? '🚗' : '🧾'}</div>
+          <div class="meio">
+            <div class="titulo">${r.tipo === 'km' ? 'Relatório de KM' : 'KM + Despesas'} · ${r.ini === r.fim ? labelRef(r.ini) : labelRef(r.ini) + ' a ' + labelRef(r.fim)}</div>
+            <div class="detalhe">${r.nome} · gerado em ${fmtData(r.em)}</div>
+          </div>
+        </div>
+        <div class="acoes">
+          <button data-acao="gerar">📄 Gerar novamente</button>
+          <button data-acao="excluir" class="perigo">🗑 Excluir</button>
+        </div>
+      </div>`).join('')
+    : `<div class="card"><div class="vazio"><span class="ico">📄</span><b>Nenhum relatório gerado</b><span>Os relatórios gerados aparecem aqui e podem ser recriados a qualquer momento.</span></div></div>`;
+
+  document.getElementById('rel-historico').querySelectorAll('.item').forEach(el => {
+    const id = Number(el.dataset.relid);
+    const r = relatorios.find(x => x.id === id);
+    el.querySelector('[data-acao="gerar"]').onclick = () => gerarPdf(r.tipo, r.ini, r.fim, false);
+    el.querySelector('[data-acao="excluir"]').onclick = () => {
+      if (confirm('Remover este relatório do histórico? O PDF pode ser recriado depois.')) {
+        relatorios = relatorios.filter(x => x.id !== id);
+        salvarTudo(); renderRelatorios();
+      }
+    };
+  });
+}
+
+document.getElementById('rel-gerar').onclick = () => {
+  const ini = refDe(rAnoIni, rMesIni);
+  const fim = valorSeg('rel-modo') === 'mes' ? ini : refDe(rAnoFim, rMesFim);
+  if (ini > fim) { alert('O mês inicial deve ser anterior ao mês final.'); return; }
+  gerarPdf(valorSeg('rel-tipo'), ini, fim, true);
+};
+
+function mesesDoPeriodo(ini, fim) {
+  return meses.filter(m => { const r = refDe(m.ano, m.mes); return r >= ini && r <= fim; })
+    .sort((a, b) => (a.ano - b.ano) || (a.mes - b.mes));
+}
+function despesasDoPeriodo(ini, fim) {
+  return despesas.filter(d => { const r = mesRef(d.data); return r >= ini && r <= fim; })
+    .sort((a, b) => a.data.localeCompare(b.data) || a.id - b.id);
+}
+
+async function gerarPdf(tipo, ini, fim, registrar) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  const VERDE = [27, 127, 76];
+  const agora = new Date();
+  const emitido = `${fmtData(hojeISO())} ${String(agora.getHours()).padStart(2,'0')}:${String(agora.getMinutes()).padStart(2,'0')}`;
+  const periodo = ini === fim ? labelRef(ini) : `${labelRef(ini)} a ${labelRef(fim)}`;
+
+  // Cabeçalho
+  doc.setFontSize(16); doc.setTextColor(...VERDE); doc.setFont(undefined, 'bold');
+  doc.text(tipo === 'km' ? 'Relatório de Quilometragem' : 'Relatório de Quilometragem e Despesas', 14, 18);
+  doc.setFontSize(9); doc.setTextColor(80); doc.setFont(undefined, 'normal');
+  doc.text(`Veículo: ${config.nome_veiculo || '—'}    Placa: ${config.placa || '—'}`, 14, 25);
+  doc.text(`Período: ${periodo}    Emitido em: ${emitido}`, 14, 30);
+  doc.setDrawColor(...VERDE); doc.setLineWidth(0.6); doc.line(14, 33, 196, 33);
+
+  const ms = mesesDoPeriodo(ini, fim);
+  let yFinal = 40;
+
+  if (tipo === 'km') {
+    // ---------- Modelo 1: Relatório de KM ----------
+    const linhas = ms.map(m => [
+      `${MESES_LABEL[m.mes - 1]}/${m.ano}`, fmtNum(m.km) + ' km',
+      fmtMoeda(config.tarifa_km), fmtMoeda(m.km * config.tarifa_km),
+    ]);
+    const totKm = ms.reduce((s, m) => s + m.km, 0);
+    linhas.push(['Total do período', fmtNum(totKm) + ' km', '', fmtMoeda(totKm * config.tarifa_km)]);
+    doc.autoTable({
+      startY: 40,
+      head: [['Mês', 'KM Rodados', 'Tarifa por KM', 'Total']],
+      body: linhas.length > 1 ? linhas : [['Nenhuma quilometragem registrada no período.', '', '', '']],
+      theme: 'grid', headStyles: { fillColor: VERDE }, styles: { fontSize: 9 },
+      didParseCell: (d) => { if (d.row.index === linhas.length - 1 && linhas.length > 1) d.cell.styles.fontStyle = 'bold'; },
+    });
+    yFinal = doc.lastAutoTable.finalY;
+  } else {
+    // ---------- Modelo 2: KM + Despesas ----------
+    const dp = despesasDoPeriodo(ini, fim);
+    const totKm = ms.reduce((s, m) => s + m.km, 0);
+    const totGeral = dp.reduce((s, d) => s + d.valor, 0);
+    const totReemb = dp.filter(d => d.reembolso === 'reembolsado').reduce((s, d) => s + d.valor, 0);
+    const custoPorKm = totKm > 0 ? totGeral / totKm : null; // nunca divide por zero
+
+    // Bloco inicial: resumo da quilometragem
+    doc.setFontSize(10); doc.setTextColor(...VERDE); doc.setFont(undefined, 'bold');
+    doc.text('Resumo da Quilometragem', 14, 41);
+    doc.setFontSize(9); doc.setTextColor(40); doc.setFont(undefined, 'normal');
+    doc.text(`KM rodados: ${fmtNum(totKm)} km    Tarifa: ${fmtMoeda(config.tarifa_km)}    Reembolso de KM: ${fmtMoeda(totKm * config.tarifa_km)}`, 14, 47);
+
+    // Tabela de despesas com subtotais por categoria
+    const corpo = [];
+    const grupos = {};
+    dp.forEach(d => { (grupos[d.categoria] = grupos[d.categoria] || []).push(d); });
+    Object.entries(grupos).forEach(([cid, itens]) => {
+      let sub = 0;
+      itens.forEach(d => {
+        sub += d.valor;
+        corpo.push([fmtData(d.data), cat(cid).label, d.descricao || '—', fmtMoeda(d.valor),
+          d.reembolso === 'reembolsado' ? 'Reembolsada' : 'Paga por mim']);
+      });
+      corpo.push([{ content: `Subtotal — ${cat(cid).label}`, colSpan: 3, styles: { fontStyle: 'bold', fillColor: [245, 248, 245] } },
+        { content: fmtMoeda(sub), styles: { fontStyle: 'bold', fillColor: [245, 248, 245] } },
+        { content: '', styles: { fillColor: [245, 248, 245] } }]);
+    });
+    doc.autoTable({
+      startY: 52,
+      head: [['Data', 'Categoria', 'Descrição', 'Valor', 'Situação']],
+      body: corpo.length ? corpo : [['Nenhuma despesa registrada no período.', '', '', '', '']],
+      theme: 'grid', headStyles: { fillColor: VERDE }, styles: { fontSize: 8 },
+    });
+    let y = doc.lastAutoTable.finalY + 8;
+    if (y > 250) { doc.addPage(); y = 20; }
+    doc.setFontSize(10); doc.setTextColor(...VERDE); doc.setFont(undefined, 'bold');
+    doc.text('Totais do Período', 14, y);
+    doc.setFontSize(9); doc.setTextColor(40); doc.setFont(undefined, 'normal');
+    const totais = [
+      `Total geral de despesas: ${fmtMoeda(totGeral)}`,
+      `Total reembolsável: ${fmtMoeda(totReemb)}`,
+      `Total pago por mim: ${fmtMoeda(totGeral - totReemb)}`,
+      `Reembolso por KM: ${fmtMoeda(totKm * config.tarifa_km)}`,
+      `Custo total: ${fmtMoeda(totGeral)}`,
+      `Custo por KM: ${custoPorKm === null ? '—' : fmtMoeda(custoPorKm)}`,
+    ];
+    totais.forEach((t, i) => doc.text(t, 14 + (i % 2) * 95, y + 7 + Math.floor(i / 2) * 6));
+    yFinal = y + 7 + 18;
+  }
+
+  // Linha de assinatura
+  let yAss = yFinal + 30;
+  if (yAss > 270) { doc.addPage(); yAss = 40; }
+  doc.setDrawColor(60); doc.setLineWidth(0.3);
+  doc.line(70, yAss, 140, yAss);
+  doc.setFontSize(8); doc.setTextColor(90);
+  doc.text('Assinatura', 105, yAss + 5, { align: 'center' });
+  doc.setFontSize(7); doc.setTextColor(150);
+  doc.text('Documento gerado localmente pelo aplicativo Controle EV — os dados permanecem no aparelho.', 105, 290, { align: 'center' });
+
+  // Nome do arquivo e entrega (compartilhar quando possível, senão baixar)
+  const base = ini === fim ? ini : `${ini}-a-${fim}`;
+  const nome = `relatorio-${tipo === 'km' ? 'km' : 'completo'}-${base}.pdf`;
+  const blob = doc.output('blob');
+  const arquivo = new (window.File || Blob)([blob], nome, { type: 'application/pdf' });
+  if (navigator.canShare && navigator.canShare({ files: [arquivo] })) {
+    try { await navigator.share({ files: [arquivo], title: nome }); }
+    catch (e) { if (e.name !== 'AbortError') doc.save(nome); }
+  } else {
+    doc.save(nome);
+  }
+
+  if (registrar) {
+    relatorios.push({ id: novoId(), tipo, ini, fim, nome, em: hojeISO() });
+    salvarTudo(); renderRelatorios();
+  }
+  toast('📄 PDF gerado!');
+}
+
+/* ================================================================
+   CONFIGURAÇÕES
+   ================================================================ */
+function renderConfig() {
+  document.getElementById('cfg-tarifa').value = String(config.tarifa_km).replace('.', ',');
+  document.getElementById('cfg-veiculo').value = config.nome_veiculo;
+  document.getElementById('cfg-placa').value = config.placa;
+  document.getElementById('cfg-meta').value = config.meta_km_mes ? String(config.meta_km_mes).replace('.', ',') : '';
+  document.getElementById('cfg-kwh-casa').value = config.custo_energia_casa_kwh ? String(config.custo_energia_casa_kwh).replace('.', ',') : '';
+  setSeg('cfg-padrao', config.padrao_reembolso);
+  setSeg('cfg-tema', config.tema);
+}
+ligarSeg('cfg-padrao', () => {});
+ligarSeg('cfg-tema', v => { config.tema = v; salvarTudo(); aplicarTema(); });
+
+document.getElementById('cfg-salvar').onclick = () => {
+  const t = parseVal(document.getElementById('cfg-tarifa').value);
+  if (isNaN(t) || t < 0) return alert('Informe uma tarifa por KM válida (ex.: 0,76).');
+  const meta = document.getElementById('cfg-meta').value.trim() === '' ? 0 : parseVal(document.getElementById('cfg-meta').value);
+  if (isNaN(meta) || meta < 0) return alert('A meta mensal deve ser um número positivo.');
+  const kwh = document.getElementById('cfg-kwh-casa').value.trim() === '' ? 0 : parseVal(document.getElementById('cfg-kwh-casa').value);
+  if (isNaN(kwh) || kwh < 0) return alert('O custo do kWh deve ser um número positivo.');
+  Object.assign(config, {
+    tarifa_km: t,
+    nome_veiculo: document.getElementById('cfg-veiculo').value.trim(),
+    placa: document.getElementById('cfg-placa').value.trim().toUpperCase(),
+    meta_km_mes: meta,
+    custo_energia_casa_kwh: kwh,
+    padrao_reembolso: valorSeg('cfg-padrao'),
+  });
+  salvarTudo(); toast('💾 Preferências salvas!');
+};
+
+/* ---------------- backup ---------------- */
+document.getElementById('bk-exportar').onclick = async () => {
+  const backup = {
+    app: 'controle-ev', versao: 1, gerado_em: new Date().toISOString(),
+    meses, despesas, config, relatorios,
+  };
+  const nome = `backup-controle-ev-${hojeISO()}.json`;
+  const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+  const arquivo = new (window.File || Blob)([blob], nome, { type: 'application/json' });
+  if (navigator.canShare && navigator.canShare({ files: [arquivo] })) {
+    try { await navigator.share({ files: [arquivo], title: nome }); return; }
+    catch (e) { if (e.name === 'AbortError') return; }
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = nome; a.click();
+  URL.revokeObjectURL(a.href);
+};
+
+document.getElementById('bk-importar').onclick = () => document.getElementById('bk-arquivo').click();
+document.getElementById('bk-arquivo').addEventListener('change', async (e) => {
+  const arq = e.target.files[0]; e.target.value = '';
+  if (!arq) return;
+  let bk;
+  try { bk = JSON.parse(await arq.text()); }
+  catch (err) { return alert('O arquivo não é um JSON válido.'); }
+  // Validação da estrutura antes de importar
+  const erro = validarBackup(bk);
+  if (erro) return alert('Importação inválida: ' + erro);
+  if (!confirm(`O backup contém ${bk.despesas.length} despesa(s) e ${bk.meses.length} mês(es) de quilometragem.\n\nTODOS os dados atuais serão substituídos. Deseja continuar?`)) return;
+  meses = bk.meses; despesas = bk.despesas;
+  config = { ...CONFIG_PADRAO, ...bk.config };
+  relatorios = bk.relatorios || [];
+  salvarTudo(); aplicarTema(); renderConfig(); toast('✅ Backup importado com sucesso!');
+});
+
+function validarBackup(o) {
+  if (!o || typeof o !== 'object') return 'não é um arquivo de backup.';
+  if (o.app !== 'controle-ev') return 'este arquivo não é um backup do Controle EV.';
+  if (!Array.isArray(o.meses) || !Array.isArray(o.despesas)) return 'estrutura incompleta.';
+  for (const m of o.meses) {
+    if (typeof m.ano !== 'number' || typeof m.mes !== 'number' || m.mes < 1 || m.mes > 12) return 'registro de mês inválido.';
+    if (typeof m.km !== 'number' || m.km < 0) return 'quilometragem inválida.';
+  }
+  for (const d of o.despesas) {
+    if (typeof d.valor !== 'number' || d.valor < 0) return 'despesa com valor inválido.';
+    if (!d.data || !/^\d{4}-\d{2}-\d{2}$/.test(d.data)) return 'despesa com data inválida.';
+    if (d.reembolso !== 'pago' && d.reembolso !== 'reembolsado') return 'situação de reembolso inválida.';
+  }
+  return null;
+}
+
+/* ---------------- apagar tudo (confirmação dupla) ---------------- */
+document.getElementById('cfg-apagar').onclick = () => {
+  if (!confirm('Isso removerá TODAS as despesas, quilometragens, relatórios e configurações. Esta ação não pode ser desfeita. Continuar?')) return;
+  if (!confirm('Tem certeza? Confirme mais uma vez: apagar TODOS os dados do aplicativo?')) return;
+  meses = []; despesas = []; relatorios = [];
+  config = { ...CONFIG_PADRAO };
+  salvarTudo(); renderConfig(); aplicarTema(); toast('🗑 Todos os dados foram apagados.');
+};
+
+/* ---------------- inicialização ---------------- */
+window.appPronto = true;
+prepararLancar();
+renderPainel();
+window.addEventListener('resize', () => {
+  if (document.getElementById('tela-inicio').classList.contains('ativa')) renderPainel();
+});
+
+// Service worker: deixa o app 100% offline depois da primeira visita
+if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>
