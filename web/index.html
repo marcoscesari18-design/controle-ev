@@ -175,6 +175,7 @@ dialog::backdrop { background:rgba(0,0,0,.5); }
 <section class="tela ativa" id="tela-inicio">
   <h1>Painel</h1>
   <div class="subtitulo" id="painel-veiculo">Seu veículo elétrico</div>
+  <div id="aviso-backup"></div>
   <div class="chips" id="painel-anos"></div>
   <div class="chips" id="painel-meses"></div>
   <div class="kpis" id="painel-kpis"></div>
@@ -355,6 +356,34 @@ dialog::backdrop { background:rgba(0,0,0,.5); }
     <input type="file" id="bk-arquivo" accept=".json,application/json" style="display:none">
   </div>
   <div class="card">
+    <h2 style="margin-top:0">☁️ Backup automático na nuvem</h2>
+    <p style="font-size:12px;color:var(--text2);margin-bottom:8px">
+      Cópia de segurança <b>criptografada no aparelho</b> antes de sair dele,
+      guardada em um espaço secreto da sua conta GitHub. Sem a sua senha,
+      ninguém lê o conteúdo — nem o GitHub.
+    </p>
+    <div id="nuvem-status" style="font-size:13px;font-weight:600;margin-bottom:10px"></div>
+    <div id="nuvem-form">
+      <p style="font-size:12px;color:var(--text2);margin-bottom:8px">
+        1) <a id="nuvem-link-token" href="https://github.com/settings/tokens/new?scopes=gist&description=Backup%20Controle%20EV" target="_blank" rel="noopener" style="color:var(--primary);font-weight:700">Toque aqui para criar seu token no GitHub</a>
+        (deixe marcado só "gist", escolha validade "No expiration" e toque em Generate token) —
+        depois copie e cole abaixo.
+      </p>
+      <label class="rotulo">Token do GitHub</label>
+      <input id="nuvem-token" type="password" placeholder="ghp_..." autocomplete="off">
+      <label class="rotulo">Senha de criptografia (crie e GUARDE — sem ela o backup é ilegível)</label>
+      <input id="nuvem-senha" type="password" placeholder="mínimo 6 caracteres" autocomplete="new-password">
+      <button class="botao tonal" id="nuvem-ativar">☁️ Ativar backup automático</button>
+      <button class="botao contorno" id="nuvem-restaurar-novo">⤵️ Restaurar backup da nuvem neste aparelho</button>
+    </div>
+    <div id="nuvem-acoes" style="display:none">
+      <button class="botao tonal" id="nuvem-agora" style="margin-top:0">☁️ Fazer cópia agora</button>
+      <button class="botao contorno" id="nuvem-restaurar">⤵️ Restaurar da nuvem</button>
+      <button class="botao contorno" id="nuvem-desativar">Desativar backup automático</button>
+    </div>
+  </div>
+
+  <div class="card">
     <h2 style="margin-top:0">Zona de perigo</h2>
     <button class="botao perigo" id="cfg-apagar" style="margin-top:0">🗑 Apagar todos os dados</button>
   </div>
@@ -390,19 +419,50 @@ dialog::backdrop { background:rgba(0,0,0,.5); }
    ================================================================ */
 'use strict';
 
-/* ---------------- armazenamento ---------------- */
-const DB = {
-  get(chave, padrao) {
-    try { const v = localStorage.getItem('cev_' + chave); return v === null ? padrao : JSON.parse(v); }
-    catch (e) { return padrao; }
+/* ---------------- armazenamento (IndexedDB) ----------------
+   IndexedDB suporta centenas de MB (fotos à vontade) e resiste
+   melhor a limpezas automáticas do que o localStorage antigo.
+   Dados de versões anteriores (localStorage) são migrados
+   automaticamente na primeira abertura. */
+const IDB = {
+  db: null,
+  abrir() {
+    return new Promise((res, rej) => {
+      const req = indexedDB.open('controle-ev', 1);
+      req.onupgradeneeded = () => req.result.createObjectStore('kv');
+      req.onsuccess = () => { IDB.db = req.result; res(); };
+      req.onerror = () => rej(req.error);
+    });
   },
-  set(chave, valor) { localStorage.setItem('cev_' + chave, JSON.stringify(valor)); },
+  get(chave) {
+    return new Promise((res) => {
+      const tx = IDB.db.transaction('kv', 'readonly').objectStore('kv').get(chave);
+      tx.onsuccess = () => res(tx.result === undefined ? null : tx.result);
+      tx.onerror = () => res(null);
+    });
+  },
+  set(chave, valor) {
+    return new Promise((res, rej) => {
+      const tx = IDB.db.transaction('kv', 'readwrite');
+      tx.objectStore('kv').put(valor, chave);
+      tx.oncomplete = () => res();
+      tx.onerror = () => rej(tx.error);
+    });
+  },
 };
 
-let meses = DB.get('meses', null);        // [{id, ano, mes, km, odoIni, odoFim, obs}]
-let despesas = DB.get('despesas', null);  // [{id, data, categoria, valor, descricao, local, kwh, reembolso, foto}]
-let config = DB.get('config', null);
-let relatorios = DB.get('relatorios', []);// [{id, tipo, ini, fim, nome, em}]
+// Leitura do formato antigo (localStorage) — usada só na migração
+function lsAntigo(chave) {
+  try { const v = localStorage.getItem('cev_' + chave); return v === null ? null : JSON.parse(v); }
+  catch (e) { return null; }
+}
+
+let meses = null;      // [{id, ano, mes, km, odoIni, odoFim, obs}]
+let despesas = null;   // [{id, data, categoria, valor, descricao, local, kwh, reembolso, foto}]
+let config = null;
+let relatorios = [];   // [{id, tipo, ini, fim, nome, em}]
+let nuvem = null;      // config do backup na nuvem (NUNCA entra no backup exportado)
+let ultimoBackupEm = null; // timestamp da última cópia de segurança (manual ou nuvem)
 
 const CONFIG_PADRAO = {
   tarifa_km: 0.76, nome_veiculo: '', placa: '', meta_km_mes: 0,
@@ -503,14 +563,17 @@ function seed() {
   salvarTudo();
 }
 function salvarTudo() {
-  DB.set('meses', meses); DB.set('despesas', despesas);
-  DB.set('config', config); DB.set('relatorios', relatorios);
+  // Grava no IndexedDB; se o backup na nuvem estiver ativo, agenda uma cópia
+  Promise.all([
+    IDB.set('meses', meses), IDB.set('despesas', despesas),
+    IDB.set('config', config), IDB.set('relatorios', relatorios),
+  ]).catch(() => toast('⚠️ Falha ao gravar no armazenamento.'));
+  agendarBackupAuto();
 }
-if (meses === null && despesas === null && config === null) seed();
-meses = meses || []; despesas = despesas || []; config = { ...CONFIG_PADRAO, ...(config || {}) };
 
 /* ---------------- tema ---------------- */
 function aplicarTema() {
+  if (!config) return; // ainda inicializando
   const t = config.tema || 'sistema';
   if (t === 'sistema') document.documentElement.removeAttribute('data-theme');
   else document.documentElement.setAttribute('data-theme', t);
@@ -518,7 +581,6 @@ function aplicarTema() {
   // Redesenha os gráficos com as novas cores (somente após o app iniciar)
   if (window.appPronto && document.getElementById('tela-inicio').classList.contains('ativa')) renderPainel();
 }
-aplicarTema();
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', aplicarTema);
 
 /* ---------------- navegação entre telas ---------------- */
@@ -608,6 +670,7 @@ function indicadores(ano, mes) {
 }
 
 function renderPainel() {
+  renderAvisoBackup();
   document.getElementById('painel-veiculo').textContent =
     config.nome_veiculo ? `${config.nome_veiculo}${config.placa ? ' · ' + config.placa : ''}` : 'Seu veículo elétrico';
   chipsAnos(document.getElementById('painel-anos'), pAno, a => { pAno = a; renderPainel(); });
@@ -1340,7 +1403,15 @@ function renderConfig() {
   document.getElementById('cfg-kwh-casa').value = config.custo_energia_casa_kwh ? String(config.custo_energia_casa_kwh).replace('.', ',') : '';
   setSeg('cfg-padrao', config.padrao_reembolso);
   setSeg('cfg-tema', config.tema);
+  renderNuvemStatus();
 }
+
+// Botões do backup na nuvem
+document.getElementById('nuvem-ativar').onclick = () => ativarNuvem();
+document.getElementById('nuvem-desativar').onclick = () => desativarNuvem();
+document.getElementById('nuvem-agora').onclick = () => backupNuvem(true);
+document.getElementById('nuvem-restaurar').onclick = () => aoRestaurarNuvem();
+document.getElementById('nuvem-restaurar-novo').onclick = () => aoRestaurarNuvem();
 ligarSeg('cfg-padrao', () => {});
 ligarSeg('cfg-tema', v => { config.tema = v; salvarTudo(); aplicarTema(); });
 
@@ -1364,10 +1435,10 @@ document.getElementById('cfg-salvar').onclick = () => {
 
 /* ---------------- backup ---------------- */
 document.getElementById('bk-exportar').onclick = async () => {
-  const backup = {
-    app: 'controle-ev', versao: 1, gerado_em: new Date().toISOString(),
-    meses, despesas, config, relatorios,
-  };
+  const backup = montarBackupObj();
+  // Registra a data da cópia (controla o aviso de backup atrasado)
+  ultimoBackupEm = new Date().toISOString();
+  IDB.set('ultimo_backup', ultimoBackupEm);
   const nome = `backup-controle-ev-${hojeISO()}.json`;
   const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
   const arquivo = new (window.File || Blob)([blob], nome, { type: 'application/json' });
@@ -1422,18 +1493,300 @@ document.getElementById('cfg-apagar').onclick = () => {
   salvarTudo(); renderConfig(); aplicarTema(); toast('🗑 Todos os dados foram apagados.');
 };
 
-/* ---------------- inicialização ---------------- */
-window.appPronto = true;
-prepararLancar();
-renderPainel();
+/* ================================================================
+   BACKUP NA NUVEM — criptografado no aparelho antes de sair dele.
+   - AES-GCM 256 bits; chave derivada da sua senha (PBKDF2, 200 mil
+     iterações). Nem o GitHub consegue ler o conteúdo.
+   - Destino: um Gist SECRETO na conta GitHub do usuário, acessado
+     com um token restrito só a gists.
+   - O token e a senha ficam somente neste aparelho (IndexedDB) e
+     NUNCA entram no backup exportado.
+   ================================================================ */
+const ARQUIVO_NUVEM = 'controle-ev-backup.enc.json';
+
+function montarBackupObj() {
+  return {
+    app: 'controle-ev', versao: 1, gerado_em: new Date().toISOString(),
+    meses, despesas, config, relatorios,
+  };
+}
+
+// ---------- criptografia (WebCrypto) ----------
+function b64(buf) { return btoa(String.fromCharCode(...new Uint8Array(buf))); }
+function unb64(s) { return Uint8Array.from(atob(s), (c) => c.charCodeAt(0)); }
+
+async function chaveDaSenha(senha, salt) {
+  const material = await crypto.subtle.importKey(
+    'raw', new TextEncoder().encode(senha), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt, iterations: 200000, hash: 'SHA-256' },
+    material, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+}
+
+async function criptografarBackup(obj, senha) {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const chave = await chaveDaSenha(senha, salt);
+  const cifrado = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv }, chave, new TextEncoder().encode(JSON.stringify(obj)));
+  return JSON.stringify({
+    app: 'controle-ev-backup-criptografado', v: 1,
+    salt: b64(salt), iv: b64(iv), dados: b64(cifrado),
+  });
+}
+
+async function descriptografarBackup(texto, senha) {
+  const pacote = JSON.parse(texto);
+  if (pacote.app !== 'controle-ev-backup-criptografado') {
+    throw new Error('Este arquivo não é um backup criptografado do Controle EV.');
+  }
+  const chave = await chaveDaSenha(senha, unb64(pacote.salt));
+  let aberto;
+  try {
+    aberto = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: unb64(pacote.iv) }, chave, unb64(pacote.dados));
+  } catch (e) {
+    throw new Error('Senha incorreta (não foi possível descriptografar).');
+  }
+  return JSON.parse(new TextDecoder().decode(aberto));
+}
+
+// ---------- API do GitHub (Gists) ----------
+async function apiGist(token, metodo, caminho, corpo) {
+  const r = await fetch('https://api.github.com' + caminho, {
+    method: metodo,
+    headers: {
+      'Authorization': 'Bearer ' + token,
+      'Accept': 'application/vnd.github+json',
+      ...(corpo ? { 'Content-Type': 'application/json' } : {}),
+    },
+    body: corpo ? JSON.stringify(corpo) : undefined,
+  });
+  return r;
+}
+
+let timerBackup = null;
+let backupPendente = false;
+
+/** Agendada após cada gravação: espera 30 s de calmaria e envia. */
+function agendarBackupAuto() {
+  if (!nuvem || !nuvem.ativo) return;
+  backupPendente = true;
+  clearTimeout(timerBackup);
+  timerBackup = setTimeout(() => backupNuvem(false), 30000);
+}
+
+/** Envia a cópia criptografada para o Gist secreto. */
+async function backupNuvem(manual) {
+  if (!nuvem || !nuvem.token || !nuvem.senha) {
+    if (manual) toast('⚠️ Configure o token e a senha primeiro.');
+    return;
+  }
+  if (!navigator.onLine) {
+    backupPendente = true;
+    if (manual) toast('📡 Sem internet — a cópia será enviada quando conectar.');
+    return;
+  }
+  try {
+    const conteudo = await criptografarBackup(montarBackupObj(), nuvem.senha);
+    const arquivos = { [ARQUIVO_NUVEM]: { content: conteudo } };
+    let r = null;
+    if (nuvem.gist_id) {
+      r = await apiGist(nuvem.token, 'PATCH', '/gists/' + nuvem.gist_id, { files: arquivos });
+      if (r.status === 404) r = null; // gist foi apagado -> cria outro
+    }
+    if (!r) {
+      r = await apiGist(nuvem.token, 'POST', '/gists', {
+        description: 'Backup criptografado do Controle EV (conteúdo ilegível sem a senha)',
+        public: false,
+        files: arquivos,
+      });
+    }
+    if (!r.ok) {
+      const msg = r.status === 401 ? 'token inválido ou expirado' : 'erro ' + r.status;
+      nuvem.ultimo_erro = msg;
+      await IDB.set('nuvem', nuvem);
+      if (manual) toast('⚠️ Falha no backup: ' + msg);
+      return;
+    }
+    const g = await r.json();
+    nuvem.gist_id = g.id;
+    nuvem.ultimo_ok = new Date().toISOString();
+    nuvem.ultimo_erro = null;
+    backupPendente = false;
+    ultimoBackupEm = nuvem.ultimo_ok;
+    await IDB.set('nuvem', nuvem);
+    await IDB.set('ultimo_backup', ultimoBackupEm);
+    if (manual) toast('☁️ Cópia de segurança enviada!');
+    if (document.getElementById('tela-config').classList.contains('ativa')) renderNuvemStatus();
+  } catch (e) {
+    if (manual) toast('⚠️ Falha no backup: ' + e.message);
+  }
+}
+
+// Quando a internet voltar, envia a cópia que ficou pendente
+window.addEventListener('online', () => { if (backupPendente) backupNuvem(false); });
+
+/** Restaura os dados a partir do Gist (novo aparelho ou recuperação). */
+async function restaurarDaNuvem(token, senha) {
+  // Localiza o gist do backup (usa o conhecido ou procura na conta)
+  let gistId = nuvem?.gist_id || null;
+  if (!gistId) {
+    const r = await apiGist(token, 'GET', '/gists?per_page=100');
+    if (!r.ok) throw new Error(r.status === 401 ? 'Token inválido.' : 'Erro ao listar backups (' + r.status + ').');
+    const lista = await r.json();
+    const achado = lista.find((g) => g.files && g.files[ARQUIVO_NUVEM]);
+    if (!achado) throw new Error('Nenhum backup do Controle EV foi encontrado nessa conta.');
+    gistId = achado.id;
+  }
+  const r = await apiGist(token, 'GET', '/gists/' + gistId);
+  if (!r.ok) throw new Error('Erro ao baixar o backup (' + r.status + ').');
+  const g = await r.json();
+  const arq = g.files[ARQUIVO_NUVEM];
+  if (!arq) throw new Error('O backup não está neste gist.');
+  const texto = arq.truncated ? await (await fetch(arq.raw_url)).text() : arq.content;
+  const bk = await descriptografarBackup(texto, senha);
+  const erro = validarBackup(bk);
+  if (erro) throw new Error('Backup inválido: ' + erro);
+  return { bk, gistId };
+}
+
+// ---------- interface da nuvem (tela Configurações) ----------
+function renderNuvemStatus() {
+  const el = document.getElementById('nuvem-status');
+  if (!el) return;
+  if (nuvem && nuvem.ativo) {
+    const quando = nuvem.ultimo_ok
+      ? new Date(nuvem.ultimo_ok).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+      : 'ainda não enviada';
+    el.innerHTML = nuvem.ultimo_erro
+      ? `🟡 Ativo, mas a última tentativa falhou (${escapar(nuvem.ultimo_erro)}).`
+      : `🟢 Ativo · última cópia: ${quando}`;
+    document.getElementById('nuvem-form').style.display = 'none';
+    document.getElementById('nuvem-acoes').style.display = 'block';
+  } else {
+    el.innerHTML = '⚪ Inativo — seus dados existem apenas neste aparelho.';
+    document.getElementById('nuvem-form').style.display = 'block';
+    document.getElementById('nuvem-acoes').style.display = 'none';
+  }
+}
+
+async function ativarNuvem() {
+  const token = document.getElementById('nuvem-token').value.trim();
+  const senha = document.getElementById('nuvem-senha').value;
+  if (!token) return alert('Cole o token do GitHub (use o link acima para criar).');
+  if (!senha || senha.length < 6) return alert('Crie uma senha de criptografia com pelo menos 6 caracteres.\n\nIMPORTANTE: guarde essa senha! Sem ela o backup não pode ser lido — nem por você.');
+  nuvem = { ativo: true, token, senha, gist_id: nuvem?.gist_id || null, ultimo_ok: null, ultimo_erro: null };
+  await IDB.set('nuvem', nuvem);
+  document.getElementById('nuvem-token').value = '';
+  document.getElementById('nuvem-senha').value = '';
+  renderNuvemStatus();
+  toast('☁️ Backup automático ativado! Enviando a primeira cópia…');
+  backupNuvem(true);
+}
+
+async function desativarNuvem() {
+  if (!confirm('Desativar o backup automático? A cópia já enviada continua na sua conta GitHub, e seus dados locais não são afetados.')) return;
+  nuvem = null;
+  await IDB.set('nuvem', null);
+  renderNuvemStatus();
+  toast('Backup automático desativado.');
+}
+
+async function aoRestaurarNuvem() {
+  let token = nuvem?.token || document.getElementById('nuvem-token').value.trim();
+  let senha = nuvem?.senha || document.getElementById('nuvem-senha').value;
+  if (!token) return alert('Informe o token do GitHub para localizar o backup.');
+  if (!senha) return alert('Informe a senha de criptografia usada no backup.');
+  try {
+    const { bk, gistId } = await restaurarDaNuvem(token, senha);
+    if (!confirm(`Backup encontrado: ${bk.despesas.length} despesa(s) e ${bk.meses.length} mês(es), gerado em ${bk.gerado_em ? new Date(bk.gerado_em).toLocaleString('pt-BR') : 'data desconhecida'}.\n\nSubstituir os dados atuais deste aparelho?`)) return;
+    meses = bk.meses; despesas = bk.despesas;
+    config = { ...CONFIG_PADRAO, ...bk.config };
+    relatorios = bk.relatorios || [];
+    if (nuvem) { nuvem.gist_id = gistId; await IDB.set('nuvem', nuvem); }
+    salvarTudo(); aplicarTema(); renderConfig();
+    toast('✅ Dados restaurados da nuvem!');
+  } catch (e) {
+    alert('Não foi possível restaurar: ' + e.message);
+  }
+}
+
+/* ---------------- aviso de backup atrasado (painel) ---------------- */
+function renderAvisoBackup() {
+  const el = document.getElementById('aviso-backup');
+  if (!el) return;
+  const temDados = despesas.length > 0 || meses.length > 0;
+  const nuvemOk = nuvem && nuvem.ativo && !nuvem.ultimo_erro;
+  const dias = ultimoBackupEm
+    ? Math.floor((Date.now() - new Date(ultimoBackupEm).getTime()) / 86400000)
+    : Infinity;
+  if (temDados && !nuvemOk && dias > 7) {
+    el.innerHTML = `<div class="card" style="border-color:var(--warn)">
+      <div style="font-size:13px;color:var(--warn);font-weight:700">⚠️ Backup atrasado</div>
+      <div style="font-size:12px;color:var(--text2);margin-top:3px">
+        ${ultimoBackupEm ? `Sua última cópia de segurança foi há ${dias} dia(s).` : 'Você ainda não fez nenhuma cópia de segurança.'}
+        Vá em <b>Config. → Backup</b> para exportar ou ativar o backup automático na nuvem.
+      </div></div>`;
+  } else {
+    el.innerHTML = '';
+  }
+}
+
+/* ---------------- inicialização (assíncrona) ---------------- */
+async function bootar() {
+  await IDB.abrir();
+  meses = await IDB.get('meses');
+  despesas = await IDB.get('despesas');
+  config = await IDB.get('config');
+  relatorios = (await IDB.get('relatorios')) || [];
+  nuvem = await IDB.get('nuvem');
+  ultimoBackupEm = await IDB.get('ultimo_backup');
+
+  if (meses === null && despesas === null && config === null) {
+    // Migração automática do formato antigo (localStorage)
+    const lsM = lsAntigo('meses'), lsD = lsAntigo('despesas'), lsC = lsAntigo('config');
+    if (lsM || lsD || lsC) {
+      meses = lsM || []; despesas = lsD || [];
+      config = { ...CONFIG_PADRAO, ...(lsC || {}) };
+      relatorios = lsAntigo('relatorios') || [];
+      salvarTudo();
+      console.log('Dados migrados do armazenamento antigo para o IndexedDB.');
+    } else {
+      seed(); // primeiro uso: dados de demonstração
+    }
+  }
+  meses = meses || []; despesas = despesas || [];
+  config = { ...CONFIG_PADRAO, ...(config || {}) };
+  relatorios = relatorios || [];
+
+  // Pede ao sistema para NÃO apagar este armazenamento automaticamente
+  try { navigator.storage?.persist?.(); } catch (e) {}
+
+  aplicarTema();
+  prepararLancar();
+  renderPainel();
+  window.appPronto = true;
+
+  // Se ficou backup pendente de uma sessão anterior, tenta enviar
+  if (nuvem && nuvem.ativo) backupNuvem(false);
+}
+
 window.addEventListener('resize', () => {
-  if (document.getElementById('tela-inicio').classList.contains('ativa')) renderPainel();
+  if (window.appPronto && document.getElementById('tela-inicio').classList.contains('ativa')) renderPainel();
 });
 
 // Service worker: deixa o app 100% offline depois da primeira visita
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
+
+bootar().catch((e) => {
+  document.body.insertAdjacentHTML('beforeend',
+    `<div style="position:fixed;inset:20px;background:var(--surface);border-radius:16px;padding:20px;z-index:999">
+       <b>Não foi possível iniciar o aplicativo.</b><br>
+       <span style="font-size:13px;color:var(--text2)">${escapar(e.message)}</span></div>`);
+});
 </script>
 </body>
 </html>

@@ -91,6 +91,7 @@ Depois:
 | [docs/APP_IPHONE_PWA.md](docs/APP_IPHONE_PWA.md) | **Caminho mais fácil no iPhone:** versão web (pasta `web/`) salva na tela de início |
 | [docs/INSTALAR_IPHONE.md](docs/INSTALAR_IPHONE.md) | iPhone como app nativo (Expo Go, Mac ou TestFlight) |
 | [docs/MANUAL_DE_USO.md](docs/MANUAL_DE_USO.md) | Manual de uso completo, tela a tela |
+| [docs/BACKUP_NUVEM.md](docs/BACKUP_NUVEM.md) | Backup automático criptografado na nuvem (grátis, opcional) |
 | [docs/CHECKLIST_TESTES.md](docs/CHECKLIST_TESTES.md) | Checklist de testes das regras de negócio |
 
 ## Versão web (PWA)

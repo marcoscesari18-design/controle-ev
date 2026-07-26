@@ -3,7 +3,7 @@
 // Estratégia: cache primeiro (o app inteiro é salvo no aparelho
 // na primeira visita; depois disso funciona sem internet).
 // ---------------------------------------------------------------
-const CACHE = 'controle-ev-v2';
+const CACHE = 'controle-ev-v3';
 const ARQUIVOS = [
   './',
   './index.html',
@@ -30,6 +30,8 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
+  // Chamadas externas (ex.: API do GitHub para o backup) vão direto à rede
+  if (new URL(e.request.url).origin !== location.origin) return;
   e.respondWith(
     caches.match(e.request, { ignoreSearch: true }).then(
       (res) => res || fetch(e.request).then((r) => {
