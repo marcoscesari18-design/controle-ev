@@ -268,6 +268,51 @@ dialog::backdrop { background:rgba(0,0,0,.5); }
   </form>
 </section>
 
+<!-- ==================== TELA: RDV ==================== -->
+<section class="tela" id="tela-rdv">
+  <h1>RDV</h1>
+  <div class="subtitulo">Despesas reembolsadas pela distribuidora</div>
+  <div class="chips" id="rdv-anos"></div>
+  <div class="chips" id="rdv-meses"></div>
+
+  <div class="card" id="rdv-resumo"></div>
+
+  <div class="card">
+    <h2 style="margin-top:0">Lançar despesa RDV</h2>
+    <form id="form-rdv" autocomplete="off">
+      <label class="rotulo">Categoria</label>
+      <div class="chips" id="rdv-categorias"></div>
+      <label class="rotulo">Valor (R$) *</label>
+      <input id="rdv-valor" inputmode="decimal" placeholder="0,00">
+      <div class="erro-campo" id="rdv-erro-valor"></div>
+      <label class="rotulo">Data *</label>
+      <input id="rdv-data" type="date">
+      <div class="erro-campo" id="rdv-erro-data"></div>
+      <label class="rotulo">Descrição da nota</label>
+      <input id="rdv-descricao" placeholder="Ex.: Almoço com cliente em Cascavel">
+      <label class="rotulo">Observação (opcional)</label>
+      <input id="rdv-obs" placeholder="Ex.: visita à loja XYZ">
+      <label class="rotulo">Forma de pagamento</label>
+      <div class="chips" id="rdv-formas"></div>
+      <label class="rotulo">Foto da nota (opcional)</label>
+      <div style="display:flex;align-items:center;gap:10px">
+        <button type="button" class="chip" onclick="document.getElementById('rdv-foto-input').click()">📷 Anexar nota</button>
+        <input type="file" id="rdv-foto-input" accept="image/*" style="display:none">
+        <img id="rdv-foto-prev" class="miniatura" style="display:none">
+        <button type="button" class="chip" id="rdv-foto-remover" style="display:none">✕ Remover</button>
+      </div>
+      <button type="submit" class="botao">✓ Salvar despesa RDV</button>
+    </form>
+  </div>
+
+  <button class="botao tonal" id="rdv-gerar-pdf" style="margin-top:0;margin-bottom:14px">
+    📄 Gerar relatório do mês (PDF com as notas)
+  </button>
+
+  <h2>Lançamentos do mês</h2>
+  <div id="rdv-lista"></div>
+</section>
+
 <!-- ==================== TELA: HISTÓRICO ==================== -->
 <section class="tela" id="tela-historico">
   <h1>Histórico</h1>
@@ -339,6 +384,22 @@ dialog::backdrop { background:rgba(0,0,0,.5); }
     <button class="botao" id="cfg-salvar">💾 Salvar preferências</button>
   </div>
   <div class="card">
+    <h2 style="margin-top:0">🧾 RDV</h2>
+    <label class="rotulo">Seu nome (aparece no cabeçalho do relatório RDV)</label>
+    <input id="cfg-colaborador" placeholder="Ex.: Marcos Cesari">
+    <label class="rotulo">Formas de pagamento cadastradas</label>
+    <div id="cfg-formas-lista" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px"></div>
+    <div style="display:flex;gap:8px">
+      <input id="cfg-forma-nova" placeholder="Ex.: Cartão corporativo" style="flex:1">
+      <button type="button" class="chip" id="cfg-forma-add" style="flex-shrink:0">➕ Adicionar</button>
+    </div>
+    <p style="font-size:11px;color:var(--text2);margin-top:8px">
+      As formas aparecem como botões rápidos ao lançar uma despesa RDV.
+      O nome é salvo junto com o botão "Salvar preferências" acima.
+    </p>
+  </div>
+
+  <div class="card">
     <h2 style="margin-top:0">Aparência</h2>
     <div class="seg" id="cfg-tema">
       <button data-v="sistema">Sistema</button>
@@ -400,6 +461,10 @@ dialog::backdrop { background:rgba(0,0,0,.5); }
   <div class="modal-cab"><b>Editar quilometragem</b><button onclick="fecharModal('modal-km')">✕</button></div>
   <div class="modal-corpo" id="modal-km-corpo"></div>
 </dialog>
+<dialog id="modal-rdv">
+  <div class="modal-cab"><b>Editar despesa RDV</b><button onclick="fecharModal('modal-rdv')">✕</button></div>
+  <div class="modal-corpo" id="modal-rdv-corpo"></div>
+</dialog>
 
 <div id="toast"></div>
 
@@ -407,8 +472,9 @@ dialog::backdrop { background:rgba(0,0,0,.5); }
 <nav id="nav">
   <button data-tela="inicio" class="ativa"><span class="ico">🏠</span>Início</button>
   <button data-tela="lancar"><span class="ico">➕</span>Lançar</button>
+  <button data-tela="rdv"><span class="ico">🧾</span>RDV</button>
   <button data-tela="historico"><span class="ico">🕐</span>Histórico</button>
-  <button data-tela="relatorios"><span class="ico">📄</span>Relatórios</button>
+  <button data-tela="relatorios"><span class="ico">📄</span>Relat.</button>
   <button data-tela="config"><span class="ico">⚙️</span>Config.</button>
 </nav>
 
@@ -461,13 +527,27 @@ let meses = null;      // [{id, ano, mes, km, odoIni, odoFim, obs}]
 let despesas = null;   // [{id, data, categoria, valor, descricao, local, kwh, reembolso, foto}]
 let config = null;
 let relatorios = [];   // [{id, tipo, ini, fim, nome, em}]
+let rdv = [];          // [{id, data, categoria, valor, descricao, obs, forma, foto}]
 let nuvem = null;      // config do backup na nuvem (NUNCA entra no backup exportado)
 let ultimoBackupEm = null; // timestamp da última cópia de segurança (manual ou nuvem)
 
 const CONFIG_PADRAO = {
   tarifa_km: 0.76, nome_veiculo: '', placa: '', meta_km_mes: 0,
   custo_energia_casa_kwh: 0, padrao_reembolso: 'pago', tema: 'sistema',
+  nome_colaborador: '', // aparece no cabeçalho do relatório RDV
+  formas_pagamento: ['Dinheiro', 'Pix', 'Cartão de crédito'],
 };
+
+// Categorias específicas do RDV (reembolso pela distribuidora)
+const CATEGORIAS_RDV = [
+  { id: 'refeicao',       label: 'Refeição',       ico: '🍽️' },
+  { id: 'combustivel',    label: 'Combustível',    ico: '⛽' },
+  { id: 'hospedagem',     label: 'Hospedagem',     ico: '🏨' },
+  { id: 'pedagio',        label: 'Pedágio',        ico: '🛣️' },
+  { id: 'estacionamento', label: 'Estacionamento', ico: '🅿️' },
+  { id: 'outros',         label: 'Outros',         ico: '🏷️' },
+];
+const catRdv = (id) => CATEGORIAS_RDV.find((c) => c.id === id) || CATEGORIAS_RDV[5];
 
 const CATEGORIAS = [
   { id:'recarga_fora',  label:'Recarga fora',    ico:'⚡', cor:'#1E88E5' },
@@ -525,6 +605,7 @@ function iniciarVazio() {
   meses = [];
   despesas = [];
   relatorios = [];
+  rdv = [];
   config = { ...CONFIG_PADRAO };
   salvarTudo();
 }
@@ -533,6 +614,7 @@ function salvarTudo() {
   Promise.all([
     IDB.set('meses', meses), IDB.set('despesas', despesas),
     IDB.set('config', config), IDB.set('relatorios', relatorios),
+    IDB.set('rdv', rdv),
   ]).catch(() => toast('⚠️ Falha ao gravar no armazenamento.'));
   agendarBackupAuto();
 }
@@ -556,6 +638,7 @@ function irPara(tela) {
   document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('ativa', b.dataset.tela === tela));
   window.scrollTo(0, 0);
   if (tela === 'inicio') renderPainel();
+  if (tela === 'rdv') renderRdv();
   if (tela === 'historico') renderHistorico();
   if (tela === 'relatorios') renderRelatorios();
   if (tela === 'config') renderConfig();
@@ -1200,9 +1283,9 @@ function renderRelatorios() {
   document.getElementById('rel-historico').innerHTML = hist.length
     ? hist.map(r => `<div class="item" data-relid="${r.id}">
         <div class="linha1">
-          <div class="ico-cat" style="background:var(--primary-cont)">${r.tipo === 'km' ? '🚗' : '🧾'}</div>
+          <div class="ico-cat" style="background:var(--primary-cont)">${({km:'🚗', completo:'🧾', rdv:'💼'})[r.tipo] || '📄'}</div>
           <div class="meio">
-            <div class="titulo">${r.tipo === 'km' ? 'Relatório de KM' : 'KM + Despesas'} · ${r.ini === r.fim ? labelRef(r.ini) : labelRef(r.ini) + ' a ' + labelRef(r.fim)}</div>
+            <div class="titulo">${({km:'Relatório de KM', completo:'KM + Despesas', rdv:'RDV'})[r.tipo] || r.tipo} · ${r.ini === r.fim ? labelRef(r.ini) : labelRef(r.ini) + ' a ' + labelRef(r.fim)}</div>
             <div class="detalhe">${r.nome} · gerado em ${fmtData(r.em)}</div>
           </div>
         </div>
@@ -1216,7 +1299,14 @@ function renderRelatorios() {
   document.getElementById('rel-historico').querySelectorAll('.item').forEach(el => {
     const id = Number(el.dataset.relid);
     const r = relatorios.find(x => x.id === id);
-    el.querySelector('[data-acao="gerar"]').onclick = () => gerarPdf(r.tipo, r.ini, r.fim, false);
+    el.querySelector('[data-acao="gerar"]').onclick = () => {
+      if (r.tipo === 'rdv') {
+        const [a, m] = r.ini.split('-').map(Number);
+        gerarRelatorioRdv(a, m, false);
+      } else {
+        gerarPdf(r.tipo, r.ini, r.fim, false);
+      }
+    };
     el.querySelector('[data-acao="excluir"]').onclick = () => {
       if (confirm('Remover este relatório do histórico? O PDF pode ser recriado depois.')) {
         relatorios = relatorios.filter(x => x.id !== id);
@@ -1369,8 +1459,42 @@ function renderConfig() {
   document.getElementById('cfg-kwh-casa').value = config.custo_energia_casa_kwh ? String(config.custo_energia_casa_kwh).replace('.', ',') : '';
   setSeg('cfg-padrao', config.padrao_reembolso);
   setSeg('cfg-tema', config.tema);
+  document.getElementById('cfg-colaborador').value = config.nome_colaborador || '';
+  renderFormasPagamento();
   renderNuvemStatus();
 }
+
+/* ---- gestão das formas de pagamento (RDV) ---- */
+function renderFormasPagamento() {
+  const el = document.getElementById('cfg-formas-lista');
+  const formas = config.formas_pagamento || [];
+  el.innerHTML = formas.length
+    ? formas.map((f, i) =>
+        `<span class="chip" style="cursor:default">${escapar(f)}
+           <b data-remover="${i}" style="cursor:pointer;margin-left:6px;color:var(--danger)">✕</b></span>`).join('')
+    : '<span style="font-size:12px;color:var(--text2)">Nenhuma forma cadastrada.</span>';
+  el.querySelectorAll('[data-remover]').forEach((b) => {
+    b.onclick = () => {
+      const i = Number(b.dataset.remover);
+      if (!confirm(`Remover a forma de pagamento "${formas[i]}"? Lançamentos antigos não são alterados.`)) return;
+      config.formas_pagamento.splice(i, 1);
+      salvarTudo(); renderFormasPagamento();
+    };
+  });
+}
+document.getElementById('cfg-forma-add').onclick = () => {
+  const campo = document.getElementById('cfg-forma-nova');
+  const nome = campo.value.trim();
+  if (!nome) return;
+  config.formas_pagamento = config.formas_pagamento || [];
+  if (config.formas_pagamento.some((f) => f.toLowerCase() === nome.toLowerCase())) {
+    return alert('Essa forma de pagamento já está cadastrada.');
+  }
+  config.formas_pagamento.push(nome);
+  campo.value = '';
+  salvarTudo(); renderFormasPagamento();
+  toast('✅ Forma de pagamento adicionada!');
+};
 
 // Botões do backup na nuvem
 document.getElementById('nuvem-ativar').onclick = () => ativarNuvem();
@@ -1395,6 +1519,7 @@ document.getElementById('cfg-salvar').onclick = () => {
     meta_km_mes: meta,
     custo_energia_casa_kwh: kwh,
     padrao_reembolso: valorSeg('cfg-padrao'),
+    nome_colaborador: document.getElementById('cfg-colaborador').value.trim(),
   });
   salvarTudo(); toast('💾 Preferências salvas!');
 };
@@ -1427,10 +1552,11 @@ document.getElementById('bk-arquivo').addEventListener('change', async (e) => {
   // Validação da estrutura antes de importar
   const erro = validarBackup(bk);
   if (erro) return alert('Importação inválida: ' + erro);
-  if (!confirm(`O backup contém ${bk.despesas.length} despesa(s) e ${bk.meses.length} mês(es) de quilometragem.\n\nTODOS os dados atuais serão substituídos. Deseja continuar?`)) return;
+  if (!confirm(`O backup contém ${bk.despesas.length} despesa(s), ${bk.meses.length} mês(es) de quilometragem e ${(bk.rdv || []).length} despesa(s) RDV.\n\nTODOS os dados atuais serão substituídos. Deseja continuar?`)) return;
   meses = bk.meses; despesas = bk.despesas;
   config = { ...CONFIG_PADRAO, ...bk.config };
   relatorios = bk.relatorios || [];
+  rdv = bk.rdv || [];
   salvarTudo(); aplicarTema(); renderConfig(); toast('✅ Backup importado com sucesso!');
 });
 
@@ -1447,6 +1573,14 @@ function validarBackup(o) {
     if (!d.data || !/^\d{4}-\d{2}-\d{2}$/.test(d.data)) return 'despesa com data inválida.';
     if (d.reembolso !== 'pago' && d.reembolso !== 'reembolsado') return 'situação de reembolso inválida.';
   }
+  // rdv é opcional (backups antigos não têm)
+  if (o.rdv !== undefined) {
+    if (!Array.isArray(o.rdv)) return 'estrutura RDV inválida.';
+    for (const r of o.rdv) {
+      if (typeof r.valor !== 'number' || r.valor < 0) return 'despesa RDV com valor inválido.';
+      if (!r.data || !/^\d{4}-\d{2}-\d{2}$/.test(r.data)) return 'despesa RDV com data inválida.';
+    }
+  }
   return null;
 }
 
@@ -1454,10 +1588,318 @@ function validarBackup(o) {
 document.getElementById('cfg-apagar').onclick = () => {
   if (!confirm('Isso removerá TODAS as despesas, quilometragens, relatórios e configurações. Esta ação não pode ser desfeita. Continuar?')) return;
   if (!confirm('Tem certeza? Confirme mais uma vez: apagar TODOS os dados do aplicativo?')) return;
-  meses = []; despesas = []; relatorios = [];
+  meses = []; despesas = []; relatorios = []; rdv = [];
   config = { ...CONFIG_PADRAO };
   salvarTudo(); renderConfig(); aplicarTema(); toast('🗑 Todos os dados foram apagados.');
 };
+
+/* ================================================================
+   RDV — Relatório de Despesas de Viagem (reembolso da distribuidora)
+   - Lançamentos próprios (refeição, combustível, hospedagem etc.)
+     com foto da nota, observação e forma de pagamento.
+   - As despesas do veículo marcadas "Reembolsada pela empresa"
+     entram AUTOMATICAMENTE no RDV do mês (etiqueta "Veículo"),
+     sem duplicar dados.
+   - PDF mensal com a tabela de despesas e TODAS as notas anexadas
+     ao final (uma por página).
+   ================================================================ */
+let rdvAno = hoje.getFullYear(), rdvMes = hoje.getMonth() + 1;
+let rdvCategoria = 'refeicao';
+let rdvForma = null;
+let rdvFoto = null;
+
+/** Une os lançamentos RDV e as despesas do veículo reembolsadas do mês */
+function itensRdvDoMes(ref) {
+  const proprios = rdv
+    .filter((r) => mesRef(r.data) === ref)
+    .map((r) => ({ ...r, origem: 'rdv', catLabel: catRdv(r.categoria).label, catIco: catRdv(r.categoria).ico }));
+  const doVeiculo = despesas
+    .filter((d) => d.reembolso === 'reembolsado' && mesRef(d.data) === ref)
+    .map((d) => ({
+      id: d.id, data: d.data, valor: d.valor,
+      descricao: d.descricao, obs: null, forma: null, foto: d.foto,
+      origem: 'veiculo', catLabel: 'Veículo — ' + cat(d.categoria).label, catIco: '🚗',
+    }));
+  return [...proprios, ...doVeiculo].sort((a, b) => a.data.localeCompare(b.data) || a.id - b.id);
+}
+
+function renderRdv() {
+  chipsAnos(document.getElementById('rdv-anos'), rdvAno, (a) => { rdvAno = a; renderRdv(); });
+  chipsMeses(document.getElementById('rdv-meses'), rdvMes, (m) => { rdvMes = m; renderRdv(); });
+  renderChips(document.getElementById('rdv-categorias'),
+    CATEGORIAS_RDV.map((c) => ({ id: c.id, label: c.label, ico: c.ico })), rdvCategoria,
+    (id) => { rdvCategoria = id; renderRdv(); });
+
+  // Formas de pagamento cadastradas nas Configurações
+  const formas = config.formas_pagamento || [];
+  if (formas.length) {
+    if (rdvForma && !formas.includes(rdvForma)) rdvForma = null;
+    renderChips(document.getElementById('rdv-formas'),
+      formas.map((f) => ({ id: f, label: f })), rdvForma,
+      (id) => { rdvForma = id; renderRdv(); });
+  } else {
+    document.getElementById('rdv-formas').innerHTML =
+      '<span style="font-size:12px;color:var(--text2)">Cadastre formas de pagamento em Config. → RDV</span>';
+  }
+
+  if (!document.getElementById('rdv-data').value) {
+    document.getElementById('rdv-data').value = hojeISO();
+  }
+
+  const ref = refDe(rdvAno, rdvMes);
+  const itens = itensRdvDoMes(ref);
+  const total = itens.reduce((s, i) => s + i.valor, 0);
+  const notas = itens.filter((i) => i.foto).length;
+
+  document.getElementById('rdv-resumo').innerHTML = `
+    <div style="font-size:12px;color:var(--text2)">Total a reembolsar em ${MESES_LABEL[rdvMes - 1]}</div>
+    <div style="font-size:24px;font-weight:800;color:var(--primary);margin-top:2px">${fmtMoeda(total)}</div>
+    <div style="font-size:12px;color:var(--text2);margin-top:2px">${itens.length} lançamento(s) · ${notas} nota(s) anexada(s)</div>`;
+
+  document.getElementById('rdv-lista').innerHTML = itens.length
+    ? itens.map((i) => `
+      <div class="item" data-rdvid="${i.id}" data-origem="${i.origem}">
+        <div class="linha1">
+          <div class="ico-cat" style="background:var(--primary-cont)">${i.catIco}</div>
+          <div class="meio">
+            <div class="titulo">${escapar(i.descricao || i.catLabel)}</div>
+            <div class="detalhe">${[fmtData(i.data), i.catLabel, i.forma, i.obs].filter(Boolean).map(escapar).join(' · ')}</div>
+          </div>
+          <div>
+            <div class="valor">${fmtMoeda(i.valor)}</div>
+            ${i.origem === 'veiculo' ? '<span class="badge reemb">Veículo</span>' : (i.foto ? '<span class="badge pago">📎 Nota</span>' : '')}
+          </div>
+        </div>
+        <div class="acoes">
+          ${i.foto ? '<button data-acao="foto">📷 Ver nota</button>' : ''}
+          <button data-acao="editar">✏️ Editar</button>
+          <button data-acao="excluir" class="perigo">🗑 Excluir</button>
+        </div>
+      </div>`).join('')
+    : `<div class="card"><div class="vazio"><span class="ico">🧾</span><b>Nenhuma despesa RDV neste mês</b><span>Lance acima ou marque despesas do veículo como "Reembolsada pela empresa".</span></div></div>`;
+
+  // Ações da lista
+  document.getElementById('rdv-lista').querySelectorAll('.item').forEach((el) => {
+    const id = Number(el.dataset.rdvid);
+    const origem = el.dataset.origem;
+    el.querySelectorAll('button[data-acao]').forEach((b) => {
+      b.onclick = () => {
+        if (origem === 'veiculo') {
+          const d = despesas.find((x) => x.id === id);
+          if (!d) return;
+          if (b.dataset.acao === 'foto') { const w = window.open(); if (w) w.document.write(`<img src="${d.foto}" style="max-width:100%">`); }
+          if (b.dataset.acao === 'editar') abrirEdicaoDespesa(d, renderRdv);
+          if (b.dataset.acao === 'excluir') {
+            if (confirm('Esta despesa pertence ao controle do veículo. Excluir de lá também?')) {
+              despesas = despesas.filter((x) => x.id !== id);
+              salvarTudo(); renderRdv();
+            }
+          }
+        } else {
+          const r = rdv.find((x) => x.id === id);
+          if (!r) return;
+          if (b.dataset.acao === 'foto') { const w = window.open(); if (w) w.document.write(`<img src="${r.foto}" style="max-width:100%">`); }
+          if (b.dataset.acao === 'editar') abrirEdicaoRdv(r);
+          if (b.dataset.acao === 'excluir') {
+            if (confirm('Excluir esta despesa RDV?')) {
+              rdv = rdv.filter((x) => x.id !== id);
+              salvarTudo(); renderRdv(); toast('🗑 Despesa RDV excluída.');
+            }
+          }
+        }
+      };
+    });
+  });
+}
+
+// Foto da nota (redimensionada)
+document.getElementById('rdv-foto-input').addEventListener('change', async (e) => {
+  const arq = e.target.files[0]; if (!arq) return;
+  try {
+    rdvFoto = await redimensionarFoto(arq);
+    const img = document.getElementById('rdv-foto-prev');
+    img.src = rdvFoto; img.style.display = 'block';
+    document.getElementById('rdv-foto-remover').style.display = 'inline-block';
+  } catch (err) { alert('Não foi possível anexar a foto.'); }
+});
+document.getElementById('rdv-foto-remover').onclick = () => {
+  rdvFoto = null;
+  document.getElementById('rdv-foto-prev').style.display = 'none';
+  document.getElementById('rdv-foto-remover').style.display = 'none';
+  document.getElementById('rdv-foto-input').value = '';
+};
+
+// Salvar lançamento RDV
+document.getElementById('form-rdv').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const v = parseVal(document.getElementById('rdv-valor').value);
+  const dataISO = document.getElementById('rdv-data').value;
+  let erro = false;
+  const eV = document.getElementById('rdv-erro-valor');
+  const eD = document.getElementById('rdv-erro-data');
+  eV.textContent = ''; eD.textContent = '';
+  if (isNaN(v)) { eV.textContent = 'Informe o valor.'; erro = true; }
+  else if (v <= 0) { eV.textContent = 'O valor deve ser maior que zero.'; erro = true; }
+  if (!dataISO || !/^\d{4}-\d{2}-\d{2}$/.test(dataISO)) { eD.textContent = 'Informe uma data válida.'; erro = true; }
+  if (erro) return;
+
+  rdv.push({
+    id: novoId(),
+    data: dataISO,
+    categoria: rdvCategoria,
+    valor: v,
+    descricao: document.getElementById('rdv-descricao').value.trim() || null,
+    obs: document.getElementById('rdv-obs').value.trim() || null,
+    forma: rdvForma,
+    foto: rdvFoto,
+  });
+  salvarTudo();
+  document.getElementById('rdv-valor').value = '';
+  document.getElementById('rdv-descricao').value = '';
+  document.getElementById('rdv-obs').value = '';
+  document.getElementById('rdv-foto-remover').onclick();
+  // Salta o filtro para o mês do lançamento (feedback imediato)
+  const [a, m] = dataISO.split('-').map(Number);
+  rdvAno = a; rdvMes = m;
+  renderRdv();
+  toast('✅ Despesa RDV salva!');
+});
+
+// Edição de lançamento RDV (modal)
+function abrirEdicaoRdv(r) {
+  const corpo = document.getElementById('modal-rdv-corpo');
+  const formas = config.formas_pagamento || [];
+  corpo.innerHTML = `
+    <label class="rotulo">Categoria</label><div class="chips" id="edr-cats"></div>
+    <label class="rotulo">Valor (R$) *</label>
+    <input id="edr-valor" inputmode="decimal" value="${String(r.valor).replace('.', ',')}">
+    <div class="erro-campo" id="edr-erro"></div>
+    <label class="rotulo">Data *</label>
+    <input id="edr-data" type="date" value="${r.data}">
+    <label class="rotulo">Descrição da nota</label>
+    <input id="edr-desc" value="${escapar(r.descricao || '')}">
+    <label class="rotulo">Observação</label>
+    <input id="edr-obs" value="${escapar(r.obs || '')}">
+    <label class="rotulo">Forma de pagamento</label>
+    <div class="chips" id="edr-formas"></div>
+    <button class="botao" id="edr-salvar">✓ Salvar alterações</button>`;
+
+  let novaCat = r.categoria, novaForma = r.forma;
+  const desenhaCats = () => renderChips(corpo.querySelector('#edr-cats'),
+    CATEGORIAS_RDV.map((c) => ({ id: c.id, label: c.label, ico: c.ico })), novaCat,
+    (id) => { novaCat = id; desenhaCats(); });
+  desenhaCats();
+  const desenhaFormas = () => renderChips(corpo.querySelector('#edr-formas'),
+    formas.map((f) => ({ id: f, label: f })), novaForma,
+    (id) => { novaForma = novaForma === id ? null : id; desenhaFormas(); });
+  if (formas.length) desenhaFormas();
+
+  corpo.querySelector('#edr-salvar').onclick = () => {
+    const v = parseVal(corpo.querySelector('#edr-valor').value);
+    const dataISO = corpo.querySelector('#edr-data').value;
+    const erroEl = corpo.querySelector('#edr-erro');
+    if (isNaN(v) || v <= 0) { erroEl.textContent = 'Valor inválido.'; return; }
+    if (!dataISO) { erroEl.textContent = 'Data inválida.'; return; }
+    Object.assign(r, {
+      data: dataISO, categoria: novaCat, valor: v,
+      descricao: corpo.querySelector('#edr-desc').value.trim() || null,
+      obs: corpo.querySelector('#edr-obs').value.trim() || null,
+      forma: novaForma,
+    });
+    salvarTudo(); fecharModal('modal-rdv'); renderRdv(); toast('✅ Despesa RDV atualizada!');
+  };
+  document.getElementById('modal-rdv').showModal();
+}
+
+// ---------- PDF mensal do RDV (com as notas ao final) ----------
+document.getElementById('rdv-gerar-pdf').onclick = () => gerarRelatorioRdv(rdvAno, rdvMes, true);
+
+async function gerarRelatorioRdv(ano, mes, registrar) {
+  const ref = refDe(ano, mes);
+  const itens = itensRdvDoMes(ref);
+  if (!itens.length) { alert('Não há despesas RDV neste mês.'); return; }
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  const VERDE = [27, 127, 76];
+  const agora = new Date();
+  const emitido = `${fmtData(hojeISO())} ${String(agora.getHours()).padStart(2, '0')}:${String(agora.getMinutes()).padStart(2, '0')}`;
+
+  // Cabeçalho
+  doc.setFontSize(16); doc.setTextColor(...VERDE); doc.setFont(undefined, 'bold');
+  doc.text('RDV — Relatório de Despesas de Viagem', 14, 18);
+  doc.setFontSize(9); doc.setTextColor(80); doc.setFont(undefined, 'normal');
+  doc.text(`Colaborador: ${config.nome_colaborador || '—'}    Veículo: ${config.nome_veiculo || '—'}  ${config.placa || ''}`, 14, 25);
+  doc.text(`Período: ${MESES_LABEL[mes - 1]}/${ano}    Emitido em: ${emitido}`, 14, 30);
+  doc.setDrawColor(...VERDE); doc.setLineWidth(0.6); doc.line(14, 33, 196, 33);
+
+  // Tabela de despesas
+  const corpo = itens.map((i) => [
+    fmtData(i.data), i.catLabel, i.descricao || '—',
+    i.forma || '—', i.obs || '—', fmtMoeda(i.valor),
+  ]);
+  const total = itens.reduce((s, i) => s + i.valor, 0);
+  corpo.push([
+    { content: 'TOTAL A REEMBOLSAR', colSpan: 5, styles: { fontStyle: 'bold', fillColor: [243, 248, 243] } },
+    { content: fmtMoeda(total), styles: { fontStyle: 'bold', fillColor: [243, 248, 243] } },
+  ]);
+  doc.autoTable({
+    startY: 38,
+    head: [['Data', 'Categoria', 'Descrição', 'Pagamento', 'Observação', 'Valor']],
+    body: corpo,
+    theme: 'grid', headStyles: { fillColor: VERDE }, styles: { fontSize: 8 },
+    columnStyles: { 5: { halign: 'right' } },
+  });
+
+  // Assinatura
+  let yAss = doc.lastAutoTable.finalY + 28;
+  if (yAss > 270) { doc.addPage(); yAss = 40; }
+  doc.setDrawColor(60); doc.setLineWidth(0.3);
+  doc.line(70, yAss, 140, yAss);
+  doc.setFontSize(8); doc.setTextColor(90);
+  doc.text('Assinatura', 105, yAss + 5, { align: 'center' });
+
+  // ---------- Notas anexadas (uma por página) ----------
+  const comNota = itens.filter((i) => i.foto);
+  for (const i of comNota) {
+    doc.addPage();
+    doc.setFontSize(11); doc.setTextColor(...VERDE); doc.setFont(undefined, 'bold');
+    doc.text('Nota anexada', 14, 16);
+    doc.setFontSize(9); doc.setTextColor(60); doc.setFont(undefined, 'normal');
+    doc.text(`${fmtData(i.data)} · ${i.catLabel} · ${i.descricao || 'sem descrição'} · ${fmtMoeda(i.valor)}`, 14, 22);
+    try {
+      const prop = doc.getImageProperties(i.foto);
+      // Ajusta a imagem à página (máx. 180 × 245 mm), mantendo a proporção
+      const maxW = 180, maxH = 245;
+      const escala = Math.min(maxW / prop.width, maxH / prop.height);
+      const w = prop.width * escala, h = prop.height * escala;
+      doc.addImage(i.foto, 'JPEG', (210 - w) / 2, 30, w, h);
+    } catch (e) {
+      doc.setTextColor(150);
+      doc.text('(não foi possível incluir a imagem desta nota)', 14, 34);
+    }
+  }
+
+  doc.setFontSize(7); doc.setTextColor(150);
+  doc.text('Documento gerado localmente pelo aplicativo Controle EV.', 105, 292, { align: 'center' });
+
+  // Entrega (compartilhar quando possível, senão baixar)
+  const nome = `relatorio-rdv-${ref}.pdf`;
+  const blob = doc.output('blob');
+  const arquivo = new (window.File || Blob)([blob], nome, { type: 'application/pdf' });
+  if (navigator.canShare && navigator.canShare({ files: [arquivo] })) {
+    try { await navigator.share({ files: [arquivo], title: nome }); }
+    catch (e) { if (e.name !== 'AbortError') doc.save(nome); }
+  } else {
+    doc.save(nome);
+  }
+
+  if (registrar) {
+    relatorios.push({ id: novoId(), tipo: 'rdv', ini: ref, fim: ref, nome, em: hojeISO() });
+    salvarTudo();
+  }
+  toast('📄 Relatório RDV gerado!');
+}
 
 /* ================================================================
    BACKUP NA NUVEM — criptografado no aparelho antes de sair dele.
@@ -1472,8 +1914,8 @@ const ARQUIVO_NUVEM = 'controle-ev-backup.enc.json';
 
 function montarBackupObj() {
   return {
-    app: 'controle-ev', versao: 1, gerado_em: new Date().toISOString(),
-    meses, despesas, config, relatorios,
+    app: 'controle-ev', versao: 2, gerado_em: new Date().toISOString(),
+    meses, despesas, config, relatorios, rdv,
   };
 }
 
@@ -1670,6 +2112,7 @@ async function aoRestaurarNuvem() {
     meses = bk.meses; despesas = bk.despesas;
     config = { ...CONFIG_PADRAO, ...bk.config };
     relatorios = bk.relatorios || [];
+    rdv = bk.rdv || [];
     if (nuvem) { nuvem.gist_id = gistId; await IDB.set('nuvem', nuvem); }
     salvarTudo(); aplicarTema(); renderConfig();
     toast('✅ Dados restaurados da nuvem!');
@@ -1706,6 +2149,7 @@ async function bootar() {
   despesas = await IDB.get('despesas');
   config = await IDB.get('config');
   relatorios = (await IDB.get('relatorios')) || [];
+  rdv = (await IDB.get('rdv')) || [];
   nuvem = await IDB.get('nuvem');
   ultimoBackupEm = await IDB.get('ultimo_backup');
 

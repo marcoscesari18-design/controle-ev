@@ -69,6 +69,25 @@ anterior.
 
 ---
 
+## 2b. RDV (Relatório de Despesas de Viagem)
+
+*📷 Captura sugerida: aba RDV com o total do mês e o formulário.*
+
+Aba exclusiva para despesas **reembolsadas pela distribuidora** (na versão web).
+
+- **Lançar:** categoria (Refeição, Combustível, Hospedagem, Pedágio,
+  Estacionamento, Outros), valor, data, descrição da nota, observação,
+  forma de pagamento (botões rápidos) e **foto da nota**.
+- **Entrada automática:** despesas do veículo marcadas como *Reembolsada pela
+  empresa* aparecem no RDV do mês com a etiqueta **Veículo** — sem duplicar
+  nada; editou lá, reflete aqui.
+- **Total do mês** em destaque no topo, com contagem de notas anexadas.
+- **Relatório mensal em PDF:** tabela com data, categoria, descrição,
+  pagamento, observação e valor + total a reembolsar + linha de assinatura +
+  **todas as notas anexadas ao final, uma por página**.
+- Nas **Configurações → RDV** você cadastra seu nome (sai no cabeçalho do
+  relatório) e as formas de pagamento.
+
 ## 3. Histórico
 
 *📷 Captura sugerida: lista de despesas com os filtros de categoria abertos.*
