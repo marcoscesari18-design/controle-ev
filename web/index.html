@@ -3,6 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<!-- Política de segurança: só executa código do próprio app e só conversa
+     com a API do GitHub (backup). Nenhum dado pode ser enviado a outros
+     servidores, mesmo que algum código malicioso fosse injetado. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://api.github.com https://gist.githubusercontent.com; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta name="referrer" content="no-referrer">
 <title>Controle EV</title>
 
 <!-- PWA: instala como app na tela de início (iPhone e Android) -->
@@ -901,7 +906,43 @@ function htmlItemDespesa(d, comDuplicar) {
     </div>
   </div>`;
 }
-function escapar(t) { const d = document.createElement('div'); d.textContent = t ?? ''; return d.innerHTML; }
+/**
+ * Escapa texto para uso seguro em HTML — inclusive DENTRO de atributos
+ * (aspas também são escapadas). Protege contra injeção de código vinda
+ * de textos maliciosos, por exemplo em um backup importado de terceiros.
+ */
+function escapar(t) {
+  return String(t ?? '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+/**
+ * Abre uma foto anexada com validação: só aceita imagens data:
+ * geradas pelo próprio app. Nada de HTML interpolado.
+ */
+function abrirFoto(foto) {
+  if (typeof foto !== 'string' || !/^data:image\/(jpeg|jpg|png|webp|gif);base64,/i.test(foto)) {
+    alert('Anexo inválido ou corrompido.');
+    return;
+  }
+  const w = window.open('', '_blank');
+  if (!w) return;
+  const img = w.document.createElement('img');
+  img.src = foto;
+  img.style.maxWidth = '100%';
+  w.document.body.style.margin = '0';
+  w.document.body.style.background = '#111';
+  w.document.body.appendChild(img);
+}
+
+/** Remove anexos que não sejam imagens data: legítimas (saneamento de importação) */
+function sanearFotos(lista) {
+  const ok = /^data:image\/(jpeg|jpg|png|webp|gif);base64,/i;
+  for (const item of lista || []) {
+    if (item.foto != null && (typeof item.foto !== 'string' || !ok.test(item.foto))) item.foto = null;
+  }
+}
 
 function ligarAcoesDespesa(container, aoMudar) {
   container.querySelectorAll('.item').forEach(el => {
@@ -911,7 +952,7 @@ function ligarAcoesDespesa(container, aoMudar) {
         const d = despesas.find(x => x.id === id);
         if (!d) return;
         if (b.dataset.acao === 'editar') abrirEdicaoDespesa(d, aoMudar);
-        if (b.dataset.acao === 'foto') { const w = window.open(); if (w) w.document.write(`<img src="${d.foto}" style="max-width:100%">`); }
+        if (b.dataset.acao === 'foto') abrirFoto(d.foto);
         if (b.dataset.acao === 'duplicar') {
           despesas.push({ ...d, id: novoId(), foto: null });
           salvarTudo(); toast('📑 Despesa duplicada!'); aoMudar();
@@ -1286,7 +1327,7 @@ function renderRelatorios() {
           <div class="ico-cat" style="background:var(--primary-cont)">${({km:'🚗', completo:'🧾', rdv:'💼'})[r.tipo] || '📄'}</div>
           <div class="meio">
             <div class="titulo">${({km:'Relatório de KM', completo:'KM + Despesas', rdv:'RDV'})[r.tipo] || r.tipo} · ${r.ini === r.fim ? labelRef(r.ini) : labelRef(r.ini) + ' a ' + labelRef(r.fim)}</div>
-            <div class="detalhe">${r.nome} · gerado em ${fmtData(r.em)}</div>
+            <div class="detalhe">${escapar(r.nome)} · gerado em ${fmtData(r.em)}</div>
           </div>
         </div>
         <div class="acoes">
@@ -1557,6 +1598,11 @@ document.getElementById('bk-arquivo').addEventListener('change', async (e) => {
   config = { ...CONFIG_PADRAO, ...bk.config };
   relatorios = bk.relatorios || [];
   rdv = bk.rdv || [];
+  // Saneamento: anexos precisam ser imagens legítimas; formas, textos simples
+  sanearFotos(despesas); sanearFotos(rdv);
+  config.formas_pagamento = Array.isArray(config.formas_pagamento)
+    ? config.formas_pagamento.filter((f) => typeof f === 'string').slice(0, 30)
+    : [...CONFIG_PADRAO.formas_pagamento];
   salvarTudo(); aplicarTema(); renderConfig(); toast('✅ Backup importado com sucesso!');
 });
 
@@ -1687,7 +1733,7 @@ function renderRdv() {
         if (origem === 'veiculo') {
           const d = despesas.find((x) => x.id === id);
           if (!d) return;
-          if (b.dataset.acao === 'foto') { const w = window.open(); if (w) w.document.write(`<img src="${d.foto}" style="max-width:100%">`); }
+          if (b.dataset.acao === 'foto') abrirFoto(d.foto);
           if (b.dataset.acao === 'editar') abrirEdicaoDespesa(d, renderRdv);
           if (b.dataset.acao === 'excluir') {
             if (confirm('Esta despesa pertence ao controle do veículo. Excluir de lá também?')) {
@@ -1698,7 +1744,7 @@ function renderRdv() {
         } else {
           const r = rdv.find((x) => x.id === id);
           if (!r) return;
-          if (b.dataset.acao === 'foto') { const w = window.open(); if (w) w.document.write(`<img src="${r.foto}" style="max-width:100%">`); }
+          if (b.dataset.acao === 'foto') abrirFoto(r.foto);
           if (b.dataset.acao === 'editar') abrirEdicaoRdv(r);
           if (b.dataset.acao === 'excluir') {
             if (confirm('Excluir esta despesa RDV?')) {
@@ -2113,6 +2159,10 @@ async function aoRestaurarNuvem() {
     config = { ...CONFIG_PADRAO, ...bk.config };
     relatorios = bk.relatorios || [];
     rdv = bk.rdv || [];
+    sanearFotos(despesas); sanearFotos(rdv);
+    config.formas_pagamento = Array.isArray(config.formas_pagamento)
+      ? config.formas_pagamento.filter((f) => typeof f === 'string').slice(0, 30)
+      : [...CONFIG_PADRAO.formas_pagamento];
     if (nuvem) { nuvem.gist_id = gistId; await IDB.set('nuvem', nuvem); }
     salvarTudo(); aplicarTema(); renderConfig();
     toast('✅ Dados restaurados da nuvem!');

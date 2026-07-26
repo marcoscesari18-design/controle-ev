@@ -3,7 +3,7 @@
 // Estratégia: cache primeiro (o app inteiro é salvo no aparelho
 // na primeira visita; depois disso funciona sem internet).
 // ---------------------------------------------------------------
-const CACHE = 'controle-ev-v5';
+const CACHE = 'controle-ev-v6';
 const ARQUIVOS = [
   './',
   './index.html',
@@ -15,7 +15,13 @@ const ARQUIVOS = [
 ];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ARQUIVOS)));
+  // cache:'reload' ignora o cache HTTP do navegador — garante que cada
+  // versão nova instala com os arquivos REALMENTE atuais do servidor
+  e.waitUntil(
+    caches.open(CACHE).then((c) =>
+      c.addAll(ARQUIVOS.map((u) => new Request(u, { cache: 'reload' })))
+    )
+  );
   self.skipWaiting();
 });
 
