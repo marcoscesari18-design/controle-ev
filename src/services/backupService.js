@@ -181,7 +181,7 @@ export function apagarTudo() {
     db.runSync('DELETE FROM despesas');
     db.runSync('DELETE FROM relatorios');
     db.runSync("DELETE FROM config WHERE chave NOT IN ('seed_aplicado')");
-    // Mantém seed_aplicado para não recriar os dados de demonstração
+    // Mantém seed_aplicado para não regravar as configurações padrão
     db.runSync("INSERT OR REPLACE INTO config (chave, valor) VALUES ('seed_aplicado', '1')");
   });
 }

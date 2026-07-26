@@ -108,12 +108,11 @@ e os critérios de aceite do projeto.
 - [ ] "Apagar todos os dados" pede **duas** confirmações
 - [ ] Cancelar em qualquer etapa não apaga nada
 - [ ] Após apagar, o app continua funcionando (telas vazias amigáveis)
-- [ ] Os dados de demonstração **não** voltam após a limpeza
+- [ ] Nenhum dado de exemplo volta após a limpeza
 
-## Dados de demonstração (primeira instalação)
+## Primeira instalação (começa vazia)
 
-- [ ] 3 meses de quilometragem pré-cadastrados
-- [ ] Despesas de todas as 7 categorias presentes
-- [ ] Há despesas "Paga por mim" e "Reembolsada pela empresa"
-- [ ] Histórico de relatórios traz 2 exemplos
-- [ ] Gráficos do painel aparecem preenchidos ao abrir pela primeira vez
+- [ ] O app abre sem nenhum lançamento pré-cadastrado
+- [ ] A tarifa por KM já vem preenchida com 0,76
+- [ ] Painel, histórico e gráficos mostram estados vazios amigáveis (sem erros)
+- [ ] O aviso de backup só aparece depois que existir algum lançamento

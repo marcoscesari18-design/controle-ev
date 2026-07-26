@@ -136,5 +136,5 @@ volta; exporte um backup antes.
 - Registre a quilometragem **uma vez por mês** (anote o odômetro no dia 1º).
 - Use **Duplicar** no Histórico para lançamentos mensais repetidos.
 - Exporte um **backup** todo mês, logo após fechar o relatório.
-- Os dados de demonstração podem ser removidos em
-  *Configurações → Apagar todos os dados*.
+- Ative o **backup automático na nuvem** antes do primeiro lançamento
+  (veja [BACKUP_NUVEM.md](BACKUP_NUVEM.md)).

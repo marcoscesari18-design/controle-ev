@@ -23,7 +23,7 @@ import HistoricoScreen from './src/screens/HistoricoScreen';
 import RelatoriosScreen from './src/screens/RelatoriosScreen';
 import ConfiguracoesScreen from './src/screens/ConfiguracoesScreen';
 
-// Inicializa o banco (migrações + dados de demonstração) antes de
+// Inicializa o banco (migrações + configurações padrão) antes de
 // qualquer tela renderizar. A API síncrona garante que tudo está
 // pronto quando o React montar os componentes.
 initDatabase();

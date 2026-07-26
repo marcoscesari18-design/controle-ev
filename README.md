@@ -18,9 +18,8 @@ e despesas de veículo elétrico, com relatórios em PDF para reembolso.
 | **Relatórios** | 2 modelos de PDF (KM e KM + Despesas), compartilhamento e histórico |
 | **Configurações** | Tarifa/KM, veículo, meta, tema claro/escuro, backup JSON e limpeza |
 
-O app já vem com **3 meses de dados de demonstração** (quilometragem, despesas
-de todas as categorias, situações mistas de reembolso e relatórios de exemplo)
-para você explorar os gráficos imediatamente.
+O app começa **vazio**, pronto para os seus primeiros registros — todas as
+telas têm orientações de estado vazio indicando o próximo passo.
 
 ## Estrutura do projeto
 
@@ -44,7 +43,7 @@ controle-ev/
 │   │   ├── dashboardService.js
 │   │   ├── relatorioService.js   # Geração dos PDFs
 │   │   └── backupService.js      # Exportar/importar JSON
-│   ├── database/db.js        # SQLite: migrações + dados de demonstração
+│   ├── database/db.js        # SQLite: migrações + configurações padrão
 │   ├── theme/theme.js        # Tema Material Design 3 (claro/escuro)
 │   └── utils/                # Formatação pt-BR, categorias, validações
 └── docs/                     # Manuais e checklist de testes

@@ -26,7 +26,7 @@ não acessa a internet.
 4. **Toque em Instalar** e aguarde.
 
 5. **Pronto!** O ícone **Controle EV** aparecerá na lista de aplicativos.
-   Na primeira abertura, o app já mostra 3 meses de dados de demonstração.
+   O app abre vazio, pronto para os seus primeiros registros.
 
 ## Possíveis avisos
 

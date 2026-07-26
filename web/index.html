@@ -517,49 +517,15 @@ function toast(msg) {
   t._timer = setTimeout(() => t.classList.remove('mostrar'), 2400);
 }
 
-/* ---------------- dados de demonstração (primeiro uso) ---------------- */
-function seed() {
-  const hoje = new Date();
-  const ms = [];
-  for (let i = 3; i >= 1; i--) {
-    const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
-    ms.push({ ano: d.getFullYear(), mes: d.getMonth() + 1 });
-  }
-  const kms = [1480, 1620, 1385];
-  let odo = 24500;
-  meses = ms.map((m, i) => {
-    const r = { id: novoId()+i, ano: m.ano, mes: m.mes, km: kms[i], odoIni: odo, odoFim: odo + kms[i], obs: 'Dados de demonstração' };
-    odo += kms[i]; return r;
-  });
-  const dia = (m, d) => `${refDe(m.ano, m.mes)}-${String(d).padStart(2,'0')}`;
-  const dd = [
-    [0,3,'recarga_casa',118.4,'Recarga noturna em casa',null,null,'pago'],
-    [0,7,'recarga_fora',64.9,'Recarga rápida na estrada','Eletroposto BR-101',38.5,'reembolsado'],
-    [0,12,'ipva',890,'Parcela 1/3 do IPVA',null,null,'pago'],
-    [0,18,'recarga_fora',52.3,'Recarga no shopping','Shopping Center Norte',30,'pago'],
-    [0,25,'outros',45,'Lavagem completa',null,null,'pago'],
-    [1,2,'recarga_casa',131.2,'Recargas em casa no mês',null,null,'pago'],
-    [1,9,'recarga_fora',71.8,'Recarga em viagem a trabalho','Posto Ipiranga km 220',42.1,'reembolsado'],
-    [1,14,'revisao',650,'Revisão de 30.000 km',null,null,'reembolsado'],
-    [1,20,'seguro',385.5,'Parcela mensal do seguro',null,null,'pago'],
-    [1,27,'recarga_fora',48.6,'Recarga rápida centro','Estação Recarga Centro',27.4,'pago'],
-    [2,4,'recarga_casa',109.7,'Recargas em casa no mês',null,null,'pago'],
-    [2,8,'pneus',1280,'Troca de 2 pneus dianteiros',null,null,'reembolsado'],
-    [2,15,'recarga_fora',59.4,'Recarga em visita a cliente','Eletroposto Av. Paulista',33.8,'reembolsado'],
-    [2,22,'seguro',385.5,'Parcela mensal do seguro',null,null,'pago'],
-    [2,28,'outros',89.9,'Palhetas do limpador',null,null,'pago'],
-  ];
-  despesas = dd.map((x, i) => ({
-    id: novoId()+100+i, data: dia(ms[x[0]], x[1]), categoria: x[2], valor: x[3],
-    descricao: x[4], local: x[5], kwh: x[6], reembolso: x[7], foto: null,
-  }));
-  config = { ...CONFIG_PADRAO, nome_veiculo: 'Meu Veículo Elétrico', placa: 'ABC1D23', meta_km_mes: 1500, custo_energia_casa_kwh: 0.92 };
-  relatorios = [
-    { id: novoId()+900, tipo:'km', ini: refDe(ms[0].ano, ms[0].mes), fim: refDe(ms[2].ano, ms[2].mes),
-      nome:`relatorio-km-${refDe(ms[0].ano,ms[0].mes)}-a-${refDe(ms[2].ano,ms[2].mes)}.pdf`, em: hojeISO() },
-    { id: novoId()+901, tipo:'completo', ini: refDe(ms[2].ano, ms[2].mes), fim: refDe(ms[2].ano, ms[2].mes),
-      nome:`relatorio-completo-${refDe(ms[2].ano,ms[2].mes)}.pdf`, em: hojeISO() },
-  ];
+/* ---------------- primeiro uso: começa vazio ----------------
+   O app inicia sem nenhum lançamento — apenas as configurações
+   padrão (tarifa R$ 0,76/km). As telas têm estados vazios
+   amigáveis orientando o primeiro registro. */
+function iniciarVazio() {
+  meses = [];
+  despesas = [];
+  relatorios = [];
+  config = { ...CONFIG_PADRAO };
   salvarTudo();
 }
 function salvarTudo() {
@@ -1753,12 +1719,27 @@ async function bootar() {
       salvarTudo();
       console.log('Dados migrados do armazenamento antigo para o IndexedDB.');
     } else {
-      seed(); // primeiro uso: dados de demonstração
+      iniciarVazio(); // primeiro uso: sem dados de exemplo
     }
   }
   meses = meses || []; despesas = despesas || [];
   config = { ...CONFIG_PADRAO, ...(config || {}) };
   relatorios = relatorios || [];
+
+  // Limpeza única: remove os antigos dados de DEMONSTRAÇÃO caso sejam
+  // os únicos dados do aparelho (assinatura exata: 3 meses marcados
+  // como demonstração + veículo/placa de exemplo intocados).
+  // Qualquer dado real quebra a assinatura e NADA é apagado.
+  const somenteDemo =
+    meses.length === 3 &&
+    meses.every((m) => m.obs === 'Dados de demonstração') &&
+    config.nome_veiculo === 'Meu Veículo Elétrico' &&
+    config.placa === 'ABC1D23' &&
+    despesas.every((d) => !d.foto);
+  if (somenteDemo) {
+    iniciarVazio();
+    console.log('Dados de demonstração antigos removidos automaticamente.');
+  }
 
   // Pede ao sistema para NÃO apagar este armazenamento automaticamente
   try { navigator.storage?.persist?.(); } catch (e) {}
