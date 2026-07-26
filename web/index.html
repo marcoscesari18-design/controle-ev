@@ -200,6 +200,13 @@ dialog::backdrop { background:rgba(0,0,0,.5); }
     <h2 style="margin-top:0">Reembolsado × Pago por mim</h2>
     <div id="wrap-graf-comp"><canvas class="grafico" id="graf-comp"></canvas></div>
   </div>
+  <div class="card">
+    <h2 style="margin-top:0" id="titulo-rdv-graf">🧾 RDV por categoria</h2>
+    <div id="wrap-graf-rdv" style="display:flex;align-items:center;gap:14px">
+      <canvas id="graf-rdv" style="width:150px;height:150px;flex-shrink:0"></canvas>
+      <div class="legenda" id="legenda-rdv" style="flex:1"></div>
+    </div>
+  </div>
   <h2>Últimos lançamentos</h2>
   <div id="painel-ultimos"></div>
 </section>
@@ -545,12 +552,12 @@ const CONFIG_PADRAO = {
 
 // Categorias específicas do RDV (reembolso pela distribuidora)
 const CATEGORIAS_RDV = [
-  { id: 'refeicao',       label: 'Refeição',       ico: '🍽️' },
-  { id: 'combustivel',    label: 'Combustível',    ico: '⛽' },
-  { id: 'hospedagem',     label: 'Hospedagem',     ico: '🏨' },
-  { id: 'pedagio',        label: 'Pedágio',        ico: '🛣️' },
-  { id: 'estacionamento', label: 'Estacionamento', ico: '🅿️' },
-  { id: 'outros',         label: 'Outros',         ico: '🏷️' },
+  { id: 'refeicao',       label: 'Refeição',       ico: '🍽️', cor: '#E53935' },
+  { id: 'combustivel',    label: 'Combustível',    ico: '⛽', cor: '#FB8C00' },
+  { id: 'hospedagem',     label: 'Hospedagem',     ico: '🏨', cor: '#8E24AA' },
+  { id: 'pedagio',        label: 'Pedágio',        ico: '🛣️', cor: '#1E88E5' },
+  { id: 'estacionamento', label: 'Estacionamento', ico: '🅿️', cor: '#00ACC1' },
+  { id: 'outros',         label: 'Outros',         ico: '🏷️', cor: '#546E7A' },
 ];
 const catRdv = (id) => CATEGORIAS_RDV.find((c) => c.id === id) || CATEGORIAS_RDV[5];
 
@@ -756,6 +763,7 @@ function renderPainel() {
   desenharBarras12(ind.serie12);
   desenharPizza(ind);
   desenharComparativo(ind);
+  desenharRdvPorCategoria();
 
   // Últimos lançamentos do mês
   const ult = despesasDoRef(refDe(pAno, pMes)).sort((a, b) => b.data.localeCompare(a.data) || b.id - a.id).slice(0, 8);
@@ -879,6 +887,68 @@ function desenharComparativo(ind) {
     ctx.font = '11px sans-serif';
     ctx.fillText(d.label, x, h - 7);
   });
+}
+
+/**
+ * Gráfico do painel: despesas RDV do mês selecionado, por categoria.
+ * Inclui as despesas do veículo reembolsadas (fatia "Veículo").
+ */
+function desenharRdvPorCategoria() {
+  document.getElementById('titulo-rdv-graf').textContent =
+    `🧾 RDV de ${MESES_LABEL[pMes - 1]} por categoria`;
+  const wrap = document.getElementById('wrap-graf-rdv');
+  const itens = itensRdvDoMes(refDe(pAno, pMes));
+
+  if (!itens.length) {
+    wrap.innerHTML = `<div class="vazio" style="width:100%"><span class="ico">🧾</span><b>Sem despesas RDV neste mês</b><span>Lance na aba RDV ou marque despesas do veículo como reembolsadas.</span></div>`;
+    return;
+  }
+  if (!wrap.querySelector('canvas')) {
+    wrap.innerHTML = `<canvas id="graf-rdv" style="width:150px;height:150px;flex-shrink:0"></canvas><div class="legenda" id="legenda-rdv" style="flex:1"></div>`;
+  }
+
+  // Agrupa por categoria (despesas do veículo viram a fatia "Veículo")
+  const grupos = new Map();
+  for (const i of itens) {
+    const chave = i.origem === 'veiculo' ? '__veiculo' : i.categoria;
+    grupos.set(chave, (grupos.get(chave) || 0) + i.valor);
+  }
+  const total = itens.reduce((s, i) => s + i.valor, 0);
+  const entradas = [...grupos.entries()]
+    .map(([id, v]) => id === '__veiculo'
+      ? { label: 'Veículo', cor: '#43A047', valor: v }
+      : { label: catRdv(id).label, cor: catRdv(id).cor, valor: v })
+    .sort((a, b) => b.valor - a.valor);
+
+  // Rosquinha (mesmo estilo do gráfico de despesas)
+  const cv = document.getElementById('graf-rdv');
+  const dpr = window.devicePixelRatio || 1;
+  cv.width = 150 * dpr; cv.height = 150 * dpr;
+  const ctx = cv.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, 150, 150);
+  const cx = 75, cy = 75, R = 70, r = 42;
+  let ang = -Math.PI / 2;
+  for (const e of entradas) {
+    const frac = e.valor / total;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, R, ang, ang + frac * Math.PI * 2);
+    ctx.closePath();
+    ctx.fillStyle = e.cor;
+    ctx.fill();
+    ang += frac * Math.PI * 2;
+  }
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = corVar('--text2');
+  ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'center';
+  ctx.fillText(fmtMoeda(total), cx, cy + 4);
+
+  document.getElementById('legenda-rdv').innerHTML = entradas.map((e) =>
+    `<div><i style="background:${e.cor}"></i><span>${escapar(e.label)}</span><b>${fmtMoeda(e.valor)}</b></div>`
+  ).join('');
 }
 
 /* ---------------- item de despesa (HTML) ---------------- */
