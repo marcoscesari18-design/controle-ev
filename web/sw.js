@@ -3,7 +3,7 @@
 // Estratégia: cache primeiro (o app inteiro é salvo no aparelho
 // na primeira visita; depois disso funciona sem internet).
 // ---------------------------------------------------------------
-const CACHE = 'controle-ev-v7';
+const CACHE = 'controle-ev-v8';
 const ARQUIVOS = [
   './',
   './index.html',

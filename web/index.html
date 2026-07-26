@@ -771,6 +771,7 @@ function renderPainel() {
     ? ult.map(d => htmlItemDespesa(d, false)).join('')
     : `<div class="card"><div class="vazio"><span class="ico">🧾</span><b>Nenhum lançamento neste mês</b><span>Toque em Lançar para registrar despesas ou quilometragem.</span></div></div>`;
   ligarAcoesDespesa(document.getElementById('painel-ultimos'), () => renderPainel());
+  setTimeout(reencaixarRolagem, 0);
 }
 
 /* ---------------- gráficos em canvas (sem bibliotecas) ---------------- */
@@ -1321,6 +1322,7 @@ function renderHistorico() {
       }
     };
   });
+  setTimeout(reencaixarRolagem, 0);
 }
 
 function abrirEdicaoKm(m) {
@@ -1826,6 +1828,7 @@ function renderRdv() {
       };
     });
   });
+  setTimeout(reencaixarRolagem, 0);
 }
 
 // Foto da nota (redimensionada)
@@ -2320,6 +2323,25 @@ async function bootar() {
 window.addEventListener('resize', () => {
   if (window.appPronto && document.getElementById('tela-inicio').classList.contains('ativa')) renderPainel();
 });
+
+/* ---------------------------------------------------------------
+   Correção de layout no iOS (app da tela de início):
+   ao fechar o teclado ou quando um filtro encolhe a lista, a página
+   fica "presa" rolada para cima e o cabeçalho some sob o relógio.
+   Este reencaixe devolve a rolagem para dentro dos limites reais.
+   --------------------------------------------------------------- */
+function reencaixarRolagem() {
+  const raiz = document.scrollingElement || document.documentElement;
+  const max = Math.max(0, raiz.scrollHeight - window.innerHeight);
+  const y = window.scrollY;
+  if (y < 0) window.scrollTo(0, 0);
+  else if (y > max) window.scrollTo(0, max);
+}
+// Ao sair de um campo (teclado fechando) e quando o teclado muda o viewport
+document.addEventListener('focusout', () => setTimeout(reencaixarRolagem, 250));
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', () => setTimeout(reencaixarRolagem, 120));
+}
 
 // Service worker: deixa o app 100% offline depois da primeira visita
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
