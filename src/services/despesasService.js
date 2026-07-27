@@ -162,7 +162,9 @@ export function listarDespesas({ ano, mes, categoria, busca, limite } = {}) {
   let sql = 'SELECT * FROM despesas';
   if (cond.length) sql += ' WHERE ' + cond.join(' AND ');
   sql += ' ORDER BY data DESC, id DESC';
-  if (limite) sql += ` LIMIT ${parseInt(limite, 10)}`;
+  // LIMIT só é aplicado com um inteiro positivo válido (evita 'LIMIT NaN')
+  const n = parseInt(limite, 10);
+  if (Number.isFinite(n) && n > 0) sql += ` LIMIT ${n}`;
 
   return db.getAllSync(sql, params);
 }

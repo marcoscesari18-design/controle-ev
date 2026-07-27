@@ -18,15 +18,31 @@ Sem internet? Sem problema: o app guarda a pendência e envia quando conectar.
 ## Ativar (uma única vez, ~2 minutos)
 
 1. No app: **Config. → ☁️ Backup automático na nuvem**
-2. Toque no link **"criar seu token no GitHub"** — a página já vem
-   pré-configurada: deixe marcado só **gist**, escolha *No expiration* e
-   toque em **Generate token**
-3. Copie o token (começa com `ghp_`) e cole no campo do app
-4. Crie uma **senha de criptografia** e anote em local seguro
+2. Toque no link **"criar seu token no GitHub"** — ele abre a criação de um
+   token **fine-grained** (de granularidade fina). Em
+   **Permissions → Account permissions → Gists**, selecione **Read and write**
+   e deixe todo o resto sem acesso. Assim o token só enxerga seus backups,
+   nada mais na conta. Gere e copie.
+3. Cole o token (começa com `github_pat_`) no campo do app
+4. Crie uma **senha de criptografia** com pelo menos **12 caracteres**
+   (misture letras e números) e anote em local seguro
    ⚠️ *Sem essa senha o backup é ilegível para sempre — não há recuperação.*
 5. Toque em **Ativar backup automático** — a primeira cópia sobe na hora
 
 O status na tela mostra 🟢 e a data/hora da última cópia enviada.
+
+### Segurança e boas práticas
+
+- **Esquecer credenciais neste aparelho:** quando o backup está ativo, existe o
+  botão *🔒 Esquecer credenciais neste aparelho*. Ele apaga o token e a senha
+  guardados localmente (o backup na nuvem continua intacto). Útil ao emprestar
+  ou vender o aparelho — depois é só recolar token e senha para reativar.
+- **Rotação de token:** periodicamente, revogue o token antigo em
+  *GitHub → Settings → Developer settings → Personal access tokens* e gere um
+  novo, repetindo os passos acima. Use o botão *Esquecer credenciais* antes,
+  para remover o token velho do aparelho.
+- **Onde ficam token e senha:** apenas no armazenamento local deste aparelho.
+  Nunca são incluídos nos arquivos de backup exportados.
 
 ## Recuperar (celular novo, perdido ou dados apagados)
 

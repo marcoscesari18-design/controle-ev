@@ -3,10 +3,11 @@
 // Estratégia: cache primeiro (o app inteiro é salvo no aparelho
 // na primeira visita; depois disso funciona sem internet).
 // ---------------------------------------------------------------
-const CACHE = 'controle-ev-v8';
+const CACHE = 'controle-ev-v9';
 const ARQUIVOS = [
   './',
   './index.html',
+  './app.js',
   './manifest.webmanifest',
   './js/jspdf.umd.min.js',
   './js/jspdf.plugin.autotable.min.js',

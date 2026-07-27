@@ -6,11 +6,18 @@ onde indicado. Como não há achados Crítico/Alto, o plano começa em Médio.
 
 Legenda de esforço: **P** pequeno (poucas linhas) · **M** médio.
 
+> **Situação de execução:** AC-01, AC-02, AC-03a, AC-03b, AC-04, AC-05, AC-06 e
+> AC-08 **aplicados e verificados no navegador**. Continuam **pendentes por
+> decisão/contexto**: AC-03c (modo sessão sem persistir senha), AC-07 (mudar de
+> hospedagem para enviar cabeçalhos), AC-09 (assinar APK com keystore própria).
+> AC-10 (rotação de token) foi **documentado** em `docs/BACKUP_NUVEM.md`.
+> Marcações **[FEITO]** / **[PENDENTE]** em cada item abaixo.
+
 ---
 
 ## Prioridade 1 — Médios
 
-### AC-01 · Exigir senha de backup mais forte  _(ref. M-01 · esforço P)_
+### AC-01 · Exigir senha de backup mais forte  _(ref. M-01 · esforço P)_ — **[FEITO]**
 - **Arquivo/linha:** `web/index.html:2205`
 - **Mudança:** elevar o mínimo de 6 para 12 caracteres e recusar senhas só
   numéricas; ajustar o texto do placeholder (linha 448) e a mensagem de alerta.
@@ -19,7 +26,7 @@ Legenda de esforço: **P** pequeno (poucas linhas) · **M** médio.
 - **Teste 3 (regressão):** um backup criado com a senha antiga ainda restaura
   normalmente (a regra nova vale só na criação, não afeta pacotes existentes).
 
-### AC-02 · Aumentar iterações do PBKDF2 para 600.000  _(ref. M-02 · esforço P)_
+### AC-02 · Aumentar iterações do PBKDF2 para 600.000  _(ref. M-02 · esforço P)_ — **[FEITO]**
 - **Arquivo/linha:** `web/index.html:2049`
 - **Mudança:** `iterations: 200000` → `iterations: 600000`. Gravar a contagem
   usada dentro do pacote cifrado (campo `iter`) e, na descriptografia
@@ -33,14 +40,14 @@ Legenda de esforço: **P** pequeno (poucas linhas) · **M** médio.
 
 ### AC-03 · Reduzir exposição do token/senha em repouso  _(ref. M-03 · esforço M)_
 Quebrado em partes independentes:
-- **AC-03a (P):** trocar o token clássico por **fine-grained** limitado a Gists —
+- **AC-03a (P) [FEITO]:** trocar o token clássico por **fine-grained** limitado a Gists —
   ver AC-05 (é a mesma mudança de link); reduz o dano de um vazamento.
-- **AC-03b (P):** adicionar botão "Esquecer credenciais neste aparelho" nas
+- **AC-03b (P) [FEITO]:** adicionar botão "Esquecer credenciais neste aparelho" nas
   Configurações que apaga `token` e `senha` de `nuvem` mantendo `gist_id`
   (mantém a referência do backup, mas exige recolar a credencial para novo envio).
   - **Teste:** usar o botão → `IDB.get('nuvem')` não contém mais `token` nem
     `senha`; o status passa a pedir recadastro.
-- **AC-03c (M):** opção de sessão sem persistir a senha — guardar a senha só em
+- **AC-03c (M) [PENDENTE]:** opção de sessão sem persistir a senha — guardar a senha só em
   memória (variável de módulo) durante a sessão e recriptografar via PBKDF2 sob
   demanda; ao fechar o app, a senha não fica em disco.
   - **Teste:** ativar o modo, recarregar o app → o app pede a senha novamente
@@ -50,7 +57,7 @@ Quebrado em partes independentes:
 
 ## Prioridade 2 — Baixos
 
-### AC-04 · Endurecer a CSP  _(ref. B-01 e B-02 · esforço M)_
+### AC-04 · Endurecer a CSP  _(ref. B-01 e B-02 · esforço M)_ — **[FEITO — script-src sem unsafe-inline; frame-ancestors segue como AC-07]**
 - **Arquivo/linha:** `web/index.html:9`
 - **Contexto:** remover `'unsafe-inline'` de `script-src` exige extrair o
   `<script>` embutido para um arquivo `app.js` servido pela mesma origem
@@ -69,7 +76,7 @@ Quebrado em partes independentes:
 - **Teste 2:** repetir o teste dinâmico de injeção de HTML → segue bloqueado.
 - **Teste 3 (regressão):** backup na nuvem ainda alcança `api.github.com`.
 
-### AC-05 · Link de token com menor privilégio  _(ref. B-03 · esforço P)_
+### AC-05 · Link de token com menor privilégio  _(ref. B-03 · esforço P)_ — **[FEITO]**
 - **Arquivo/linha:** `web/index.html:441`
 - **Mudança:** trocar a URL para o fluxo de token **fine-grained** com permissão
   apenas de Gists; atualizar o texto das instruções (linhas 441-444) e o guia
@@ -77,14 +84,14 @@ Quebrado em partes independentes:
 - **Teste:** criar um token fine-grained só de Gists e ativar o backup →
   envio e restauração funcionam; o token não consegue ler repositórios.
 
-### AC-06 · Fixar actions de CI por SHA  _(ref. B-04 · esforço P)_
+### AC-06 · Fixar actions de CI por SHA  _(ref. B-04 · esforço P)_ — **[FEITO]**
 - **Arquivos:** `.github/workflows/gerar-apk.yml` e `publicar-web.yml`
 - **Mudança:** substituir cada `uses: org/acao@vX` pelo SHA de commit
   correspondente (com comentário indicando a versão).
 - **Teste 1:** disparar "Publicar app web" → conclui com sucesso.
 - **Teste 2:** disparar "Gerar APK Android" → gera o APK na release.
 
-### AC-07 · (opcional) Cabeçalhos de segurança por hospedagem  _(ref. B-02 · esforço M)_
+### AC-07 · (opcional) Cabeçalhos de segurança por hospedagem  _(ref. B-02 · esforço M)_ — **[PENDENTE — muda o endereço do app]**
 - **Contexto:** GitHub Pages não envia `X-Frame-Options`/`X-Content-Type-Options`
   nem permite `frame-ancestors` por cabeçalho.
 - **Mudança:** publicar a pasta `web/` no Cloudflare Pages (gratuito) com um
@@ -99,14 +106,14 @@ Quebrado em partes independentes:
 
 ## Prioridade 3 — Informativos / Robustez
 
-### AC-08 · Blindar o `LIMIT` contra valor inválido  _(ref. I-01 · esforço P)_
+### AC-08 · Blindar o `LIMIT` contra valor inválido  _(ref. I-01 · esforço P)_ — **[FEITO]**
 - **Arquivo/linha:** `src/services/despesasService.js:165`
 - **Mudança:** `const n = parseInt(limite, 10); if (Number.isFinite(n) && n > 0)
   sql += ' LIMIT ' + n;`
 - **Teste:** chamar `listarDespesas({ limite: 'abc' })` → retorna resultados sem
   erro (cláusula LIMIT omitida); `listarDespesas({ limite: 8 })` → no máx. 8.
 
-### AC-09 · Assinar o APK com keystore própria  _(ref. I-02 · esforço M)_
+### AC-09 · Assinar o APK com keystore própria  _(ref. I-02 · esforço M)_ — **[PENDENTE — só se distribuir fora do uso pessoal]**
 - **Contexto:** só necessário se houver intenção de distribuir fora do uso
   pessoal.
 - **Mudança:** gerar keystore, guardá-la como secret do repositório e ajustar o
@@ -114,7 +121,7 @@ Quebrado em partes independentes:
 - **Teste:** `apksigner verify` no APK gerado confirma a assinatura própria.
 - **Nota:** manter a keystore fora do Git (já coberto por `.gitignore:15-19`).
 
-### AC-10 · (recomendado, transversal) Rotina de rotação de token
+### AC-10 · (recomendado, transversal) Rotina de rotação de token — **[FEITO — documentado]**
 - **Contexto:** não é um bug de código, mas reduz o risco de M-03/B-03 ao longo
   do tempo.
 - **Mudança:** documentar em `docs/BACKUP_NUVEM.md` como revogar e recriar o

@@ -290,8 +290,8 @@ substituição integral mediante confirmação.
 ### 7.3 Segurança (web)
 
 - **Content-Security-Policy** (meta): `default-src 'self'`;
-  `script-src 'self' 'unsafe-inline'`; `style-src 'self' 'unsafe-inline'`;
-  `img-src 'self' data: blob:`;
+  `script-src 'self'` (script movido para `app.js` externo; sem `'unsafe-inline'`);
+  `style-src 'self' 'unsafe-inline'`; `img-src 'self' data: blob:`;
   `connect-src 'self' https://api.github.com https://gist.githubusercontent.com`;
   `object-src 'none'`; `base-uri 'self'`; `form-action 'self'`
 - `referrer: no-referrer`
@@ -305,7 +305,7 @@ substituição integral mediante confirmação.
 
 ### 7.4 Service worker (`web/sw.js`)
 
-- Cache nomeado `controle-ev-v8` (versão incrementada a cada publicação)
+- Cache nomeado `controle-ev-v9` (versão incrementada a cada publicação)
 - Pré-cache: `./`, `index.html`, `manifest.webmanifest`, os 2 arquivos jsPDF e os 2 ícones
 - Instalação com `Request(..., {cache:'reload'})` (ignora o cache HTTP do navegador)
 - `skipWaiting` + `clients.claim`; remoção de caches de versões anteriores na ativação

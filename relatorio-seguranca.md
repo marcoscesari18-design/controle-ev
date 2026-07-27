@@ -17,13 +17,18 @@ token do próprio usuário (`web/index.html:2083`).
 
 ## Resumo
 
-| Severidade | Quantidade |
-|---|---|
-| Crítico | 0 |
-| Alto | 0 |
-| Médio | 3 (M-01 a M-03) |
-| Baixo | 4 (B-01 a B-04) |
-| Informativo | 3 (I-01 a I-03) |
+| Severidade | Quantidade | Situação |
+|---|---|---|
+| Crítico | 0 | — |
+| Alto | 0 | — |
+| Médio | 3 (M-01 a M-03) | M-01, M-02 corrigidos; M-03 mitigado |
+| Baixo | 4 (B-01 a B-04) | B-01, B-03, B-04 corrigidos; B-02 limitação da hospedagem |
+| Informativo | 3 (I-01 a I-03) | I-01 corrigido |
+
+> **Atualização (commit posterior):** as correções do `plano-de-acao.md` foram
+> aplicadas e verificadas no navegador. O status de cada achado aparece em
+> **negrito** ao final da sua descrição. Este relatório mantém o texto original
+> do diagnóstico; os números de linha referem-se ao commit `31b7d14`.
 
 ---
 
@@ -122,12 +127,14 @@ Impacto: senhas curtas reduzem drasticamente o custo de força bruta offline
 contra o pacote cifrado armazenado no gist.
 Condição de exploração: atacante precisa antes obter o arquivo do gist secreto
 (token vazado ou conta GitHub comprometida).
+**STATUS: CORRIGIDO (AC-01).** Mínimo elevado para 12 caracteres, senhas só numéricas recusadas (`validarSenhaBackup`).
 
 **M-02 · PBKDF2 com 200.000 iterações**
 Evidência: `web/index.html:2049`.
 Impacto: abaixo da recomendação corrente do OWASP Password Storage Cheat Sheet
 para PBKDF2-HMAC-SHA256 (600.000 iterações), reduzindo o custo de ataque
 offline por senha testada.
+**STATUS: CORRIGIDO (AC-02).** Iterações elevadas para 600.000; a contagem é gravada no pacote (`iter`) com fallback 200.000 para backups antigos.
 
 **M-03 · Token do GitHub e senha de criptografia armazenados em texto claro no IndexedDB**
 Evidência: gravação em `web/index.html:2206-2207` (`nuvem = { ativo: true, token, senha, ... }` → `IDB.set('nuvem', nuvem)`).
@@ -137,7 +144,7 @@ Mitigações já presentes: CSP restringe destinos de rede a `api.github.com`
 (linha 9), o valor nunca entra em backups exportados
 (`montarBackupObj`, `web/index.html:2016-2021`) e os campos de entrada são
 `type="password"` (linhas 446, 448). Armazenar a credencial é requisito do
-backup automático (design documentado em `docs/BACKUP_NUVEM.md`).
+**STATUS: MITIGADO (AC-03).** Adicionado botão "Esquecer credenciais neste aparelho" e migração para token fine-grained de menor privilégio; persistir a credencial segue sendo requisito do backup automático.
 
 ### Baixo
 
@@ -147,6 +154,7 @@ Impacto: a CSP não bloqueia execução de script inline injetado; a proteção
 anti-XSS recai sobre o escape de saída (`escapar`, linha 985) e a barreira de
 exfiltração fica com `connect-src`/`img-src`. Decorrência da arquitetura de
 arquivo único com script embutido.
+**STATUS: CORRIGIDO (AC-04).** Script movido para `app.js` externo; `'unsafe-inline'` removido de `script-src`. Bloqueio de script inline confirmado em teste.
 
 **B-02 · Página pode ser incorporada em iframe de terceiros (clickjacking)**
 Evidência: produção não envia `X-Frame-Options` (verificado por `curl -I`; o
@@ -155,18 +163,21 @@ não tem efeito em CSP declarada via `<meta>` (limitação da especificação; a
 do app está em meta tag, `web/index.html:9`).
 Impacto: baixo no contexto (não há sessão autenticada para sequestrar cliques),
 mas a incorporação é tecnicamente possível.
+**STATUS: LIMITAÇÃO DA HOSPEDAGEM (B-02).** `frame-ancestors` não vale em CSP via `<meta>` e o GitHub Pages não envia cabeçalhos personalizados; correção exige mudar de hospedagem (AC-07, opcional).
 
 **B-03 · Link de criação de token usa token clássico com escopo `gist` amplo**
 Evidência: `web/index.html:441` (URL `settings/tokens/new?scopes=gist`).
 Impacto: token clássico com escopo `gist` lê/escreve **todos** os gists da
 conta, não apenas o gist do backup. Um token de granularidade fina (fine-grained)
 limitado a Gists reduziria o privilégio em caso de vazamento.
+**STATUS: CORRIGIDO (AC-05).** Link do app agora abre a criação de token fine-grained restrito a Gists.
 
 **B-04 · Actions de CI referenciadas por tag mutável**
 Evidência: `.github/workflows/gerar-apk.yml:24,27,33,53,65` e
 `.github/workflows/publicar-web.yml:30,33,36,42` (`@v4`, `@v5`, `@v2`, `@v3`).
 Impacto: tags podem ser movidas pelo mantenedor da action (risco de cadeia de
 suprimentos no CI). Prática mais estrita é fixar por SHA de commit.
+**STATUS: CORRIGIDO (AC-06).** Todas as actions dos dois workflows fixadas por SHA de commit.
 
 ### Informativo
 
@@ -174,6 +185,7 @@ suprimentos no CI). Prática mais estrita é fixar por SHA de commit.
 Evidência: `src/services/despesasService.js:165` — `parseInt('abc')` → `NaN`
 → `LIMIT NaN` causaria erro de sintaxe SQL. Hoje o parâmetro só recebe o valor
 interno `8`.
+**STATUS: CORRIGIDO (AC-08).** `LIMIT` só é aplicado com inteiro positivo (`Number.isFinite`).
 
 **I-02 · APK assinado com chave de depuração**
 Evidência: processo descrito em `docs/GERAR_APK.md` (build `assembleRelease`
